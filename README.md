@@ -18,22 +18,41 @@ share your messages, settings, or any other data with external servers.
 Architecture
 ------------
 
-The extension is split into site-independent behavior and site-specific DOM adapters:
+The extension separates generic behavior from chatbot-specific DOM knowledge:
 
-- `site-adapters.js`: selectors and DOM behavior for each supported chatbot.
+- `site-adapter-registry.js`: adapter registration, validation, and shared DOM helpers.
+- `adapters/chatgpt.js`: ChatGPT selectors and DOM behavior.
+- `adapters/gemini.js`: Gemini selectors and DOM behavior.
 - `composer-direction.js`: generic Left/Right Ctrl + Shift handling.
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
 - `styles.css`: shared direction/button styling.
 
-The generic files do not branch on ChatGPT vs Gemini. They ask the active adapter for
-the composer, messages, roles, action bars, and exact text elements to align.
+`composer-direction.js` and `response-direction.js` contain no ChatGPT/Gemini host checks.
+They only call the active adapter through the registry.
+
+Adapter contract
+----------------
+
+Every chatbot adapter has a stable `id` and implements:
+
+- `matches(location)`
+- `findComposerEditor(activeElement)`
+- `getMessages()`
+- `getRole(message)`
+- `getTurn(message)`
+- `findActionBar(turn, role)`
+- `getDirectionTarget(message, role)`
+
+`getDirectionTarget()` must return the text/content element to align, not a user-message
+bubble container. This keeps bubble placement under the host application's control.
 
 Adding another chatbot
 ----------------------
 
 1. Add its URL pattern to `manifest.json`.
-2. Add one adapter object to `site-adapters.js` implementing the documented adapter contract.
-3. Add that adapter to the `siteAdapters` registry.
+2. Add a new file under `adapters/`, for example `adapters/claude.js`.
+3. Register one adapter from that file with `ChatDirectionControl.registerAdapter(...)`.
+4. Add the adapter file to the manifest before the two generic controller scripts.
 
 No host-specific condition should be added to `composer-direction.js` or
 `response-direction.js`.
