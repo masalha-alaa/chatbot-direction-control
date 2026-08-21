@@ -13,7 +13,7 @@
 }
 
 .cgpt-direction-target.cgpt-force-rtl :where(
-  p, div, h1, h2, h3, h4, h5, h6,
+  p, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
   direction: rtl !important;
@@ -21,7 +21,7 @@
 }
 
 .cgpt-direction-target.cgpt-force-ltr :where(
-  p, div, h1, h2, h3, h4, h5, h6,
+  p, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
   direction: ltr !important;
