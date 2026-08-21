@@ -117,3 +117,22 @@
   outline: var(--cdc-focus-ring-width) solid currentColor !important;
   outline-offset: var(--cdc-focus-ring-offset) !important;
 }
+
+/*
+ * Site adapters may opt a message turn into host-native hover visibility by
+ * setting data-cdc-toolbar-visibility="hover" on that turn. This keeps the
+ * generic toolbar logic site-agnostic while allowing a host such as Gemini to
+ * reveal our controls at the same time as its own copy/edit controls.
+ */
+[data-cdc-toolbar-visibility="hover"] .cgpt-direction-toolbar {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+[data-cdc-toolbar-visibility="hover"]:hover .cgpt-direction-toolbar,
+[data-cdc-toolbar-visibility="hover"]:focus-within .cgpt-direction-toolbar {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
