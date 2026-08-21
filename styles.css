@@ -24,8 +24,19 @@
   text-align: left !important;
 }
 
+[data-message-author-role="user"] .cgpt-user-direction-target.cgpt-force-rtl {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+[data-message-author-role="user"] .cgpt-user-direction-target.cgpt-force-ltr {
+  direction: ltr !important;
+  text-align: left !important;
+}
+
 [data-message-author-role="assistant"].cgpt-force-rtl :where(pre, pre *, code, kbd, samp),
-[data-message-author-role="assistant"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp) {
+[data-message-author-role="assistant"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp),
+[data-message-author-role="user"] .cgpt-user-direction-target :where(pre, pre *, code, kbd, samp) {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: isolate !important;
