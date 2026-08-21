@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Direction Controls",
+  "name": "ChatGPT Direction Control",
   "version": "1.0.0",
   "description": "Adds per-response LTR/RTL controls and keyboard shortcuts for switching the ChatGPT composer direction.",
   "permissions": [
