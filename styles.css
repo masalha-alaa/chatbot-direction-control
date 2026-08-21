@@ -1,0 +1,84 @@
+[data-message-author-role="assistant"].cgpt-force-rtl {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+[data-message-author-role="assistant"].cgpt-force-ltr {
+  direction: ltr !important;
+  text-align: left !important;
+}
+
+[data-message-author-role="assistant"].cgpt-force-rtl :where(
+  p, div.markdown, h1, h2, h3, h4, h5, h6,
+  ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
+) {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+[data-message-author-role="assistant"].cgpt-force-ltr :where(
+  p, div.markdown, h1, h2, h3, h4, h5, h6,
+  ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
+) {
+  direction: ltr !important;
+  text-align: left !important;
+}
+
+[data-message-author-role="assistant"].cgpt-force-rtl :where(pre, pre *, code, kbd, samp),
+[data-message-author-role="assistant"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp) {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate !important;
+}
+
+.cgpt-direction-toolbar {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 2px !important;
+  direction: ltr !important;
+  vertical-align: middle !important;
+  margin-inline-start: 4px !important;
+}
+
+.cgpt-direction-button {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  box-sizing: border-box !important;
+  width: 30px !important;
+  height: 30px !important;
+  padding: 5px !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid transparent !important;
+  border-radius: 7px !important;
+  background: transparent !important;
+  color: currentColor !important;
+  opacity: 0.68 !important;
+  cursor: pointer !important;
+  line-height: 1 !important;
+}
+
+.cgpt-direction-button svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block !important;
+  pointer-events: none !important;
+}
+
+.cgpt-direction-button:hover {
+  opacity: 1 !important;
+  background: color-mix(in srgb, currentColor 9%, transparent) !important;
+}
+
+.cgpt-direction-button.cgpt-direction-active {
+  opacity: 1 !important;
+  border-color: color-mix(in srgb, currentColor 24%, transparent) !important;
+  background: color-mix(in srgb, currentColor 11%, transparent) !important;
+}
+
+.cgpt-direction-button:focus-visible {
+  outline: 2px solid currentColor !important;
+  outline-offset: 2px !important;
+}
