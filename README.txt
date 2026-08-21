@@ -1,4 +1,4 @@
-ChatGPT Direction Control — v1.1.0
+ChatGPT Direction Control — v1.0.0
 
 Direction controls for ChatGPT and Gemini.
 
