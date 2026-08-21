@@ -1,14 +1,20 @@
-[data-message-author-role="assistant"].cgpt-force-rtl {
+[data-message-author-role="assistant"].cgpt-force-rtl,
+[data-message-author-role="user"].cgpt-force-rtl {
   direction: rtl !important;
   text-align: right !important;
 }
 
-[data-message-author-role="assistant"].cgpt-force-ltr {
+[data-message-author-role="assistant"].cgpt-force-ltr,
+[data-message-author-role="user"].cgpt-force-ltr {
   direction: ltr !important;
   text-align: left !important;
 }
 
 [data-message-author-role="assistant"].cgpt-force-rtl :where(
+  p, div.markdown, h1, h2, h3, h4, h5, h6,
+  ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
+),
+[data-message-author-role="user"].cgpt-force-rtl :where(
   p, div.markdown, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
@@ -19,13 +25,19 @@
 [data-message-author-role="assistant"].cgpt-force-ltr :where(
   p, div.markdown, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
+),
+[data-message-author-role="user"].cgpt-force-ltr :where(
+  p, div.markdown, h1, h2, h3, h4, h5, h6,
+  ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
   direction: ltr !important;
   text-align: left !important;
 }
 
 [data-message-author-role="assistant"].cgpt-force-rtl :where(pre, pre *, code, kbd, samp),
-[data-message-author-role="assistant"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp) {
+[data-message-author-role="assistant"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp),
+[data-message-author-role="user"].cgpt-force-rtl :where(pre, pre *, code, kbd, samp),
+[data-message-author-role="user"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp) {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: isolate !important;
