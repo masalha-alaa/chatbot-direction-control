@@ -1,13 +1,13 @@
-ChatGPT Direction Control — v1.0.0
+ChatGPT Direction Control — v1.0.1
 
 Combined extension containing both previous extensions.
 
 Features:
 
 - Use Left/Right Ctrl + Shift to switch the message box to left/right alignment.
-- Change each ChatGPT response between left-to-right (CT R) and right-to-left (RTL)
-  using the alignment icons shown below each response.
-- Each response can be adjusted independently.
+- Change each user/assistant message between left-to-right (CT R) and right-to-left (RTL)
+  using the alignment icons shown below each message.
+- Each message can be adjusted independently.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew,
 The extension works entirely on your computer. It does not collect, send, upload, or
