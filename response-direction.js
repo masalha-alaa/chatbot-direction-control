@@ -4,6 +4,8 @@
   const TOOLBAR_CLASS = "cgpt-direction-toolbar";
   const RTL_CLASS = "cgpt-force-rtl";
   const LTR_CLASS = "cgpt-force-ltr";
+  const USER_ACTIONS_LTR_CLASS = "cgpt-user-actions-ltr";
+  const USER_ACTIONS_RTL_CLASS = "cgpt-user-actions-rtl";
   const MESSAGE_SELECTOR = '[data-message-author-role="assistant"], [data-message-author-role="user"]';
   let timer = null;
 
@@ -77,6 +79,15 @@
 
     const turn = getTurn(node);
     const toolbar = turn?.querySelector(`.${TOOLBAR_CLASS}`);
+    const actionBar = toolbar?.parentElement;
+    const isUser = node.getAttribute("data-message-author-role") === "user";
+
+    if (isUser && actionBar) {
+      actionBar.classList.remove(USER_ACTIONS_LTR_CLASS, USER_ACTIONS_RTL_CLASS);
+      if (mode === "ltr") actionBar.classList.add(USER_ACTIONS_LTR_CLASS);
+      if (mode === "rtl") actionBar.classList.add(USER_ACTIONS_RTL_CLASS);
+    }
+
     if (!toolbar) return;
 
     for (const button of toolbar.querySelectorAll(".cgpt-direction-button")) {
@@ -159,6 +170,7 @@
     const existing = turn.querySelector(`.${TOOLBAR_CLASS}`);
     if (existing) {
       if (existing.parentElement === actionBar) return;
+      existing.parentElement?.classList.remove(USER_ACTIONS_LTR_CLASS, USER_ACTIONS_RTL_CLASS);
       existing.remove();
     }
 
