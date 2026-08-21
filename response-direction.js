@@ -103,6 +103,21 @@
     return bar;
   }
 
+  function actionBarFromButton(button) {
+    if (!button) return null;
+
+    let bar = button.parentElement;
+    let fallback = bar;
+
+    for (let i = 0; bar && i < 4; i += 1) {
+      if (bar.querySelectorAll("button").length >= 2) return bar;
+      fallback = bar;
+      bar = bar.parentElement;
+    }
+
+    return fallback;
+  }
+
   function findGeminiActionBar(turn, role) {
     if (!turn) return null;
 
@@ -113,15 +128,24 @@
         || turn.querySelector(".response-container-footer");
       if (exact) return exact;
     } else {
-      const exact =
-        turn.querySelector(".buttons-container-v2")
-        || turn.querySelector('[class*="buttons-container"]');
+      const editHost = turn.querySelector('[data-test-id="prompt-edit-button"]');
+      const editButton = editHost?.matches?.("button")
+        ? editHost
+        : editHost?.querySelector?.("button");
+
+      const copyIcon = turn.querySelector(
+        'mat-icon[fonticon="content_copy"], mat-icon[fonticon="copy"], mat-icon[data-mat-icon-name="content_copy"], mat-icon[data-mat-icon-name="copy"]'
+      );
+      const copyButton = copyIcon?.closest?.("button");
+
+      const exact = actionBarFromButton(editButton || copyButton);
       if (exact) return exact;
     }
 
     const actionButton =
       turn.querySelector('button[aria-label*="Copy" i]')
-      || turn.querySelector('[data-test-id="prompt-edit-button"]')
+      || turn.querySelector('[data-test-id="prompt-edit-button"] button')
+      || turn.querySelector('button[data-test-id="prompt-edit-button"]')
       || turn.querySelector('button[aria-label*="Edit" i]')
       || turn.querySelector('button[aria-label*="More" i]')
       || turn.querySelector('button[aria-label*="option" i]')
@@ -132,7 +156,7 @@
 
     return actionButton.closest?.(
       ".buttons-container-v2, .buttons-container, .response-actions, .actions-container, [class*='action-buttons'], [class*='buttons-container']"
-    ) || actionButton.parentElement;
+    ) || actionBarFromButton(actionButton);
   }
 
   function findActionBar(turn, role) {
