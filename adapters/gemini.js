@@ -14,6 +14,12 @@
   const MAX_ACTION_BAR_ANCESTORS = 4;
   const MIN_ACTION_BUTTONS = 2;
 
+  // Shared CSS recognizes this adapter-controlled visibility policy. Applying
+  // it to the whole user turn makes our toolbar appear at the same time as
+  // Gemini's native copy/edit controls: when that turn is hovered or focused.
+  const TOOLBAR_VISIBILITY_ATTRIBUTE = "data-cdc-toolbar-visibility";
+  const TOOLBAR_VISIBILITY_HOVER = "hover";
+
   function actionBarFromButton(button) {
     if (!(button instanceof HTMLElement)) return null;
 
@@ -34,6 +40,19 @@
     }
 
     return fallback;
+  }
+
+  function useNativeUserActionVisibility(turn, actionBar) {
+    if (!(turn instanceof HTMLElement) || !(actionBar instanceof HTMLElement)) {
+      return actionBar;
+    }
+
+    turn.setAttribute(
+      TOOLBAR_VISIBILITY_ATTRIBUTE,
+      TOOLBAR_VISIBILITY_HOVER
+    );
+
+    return actionBar;
   }
 
   api.registerAdapter({
@@ -112,7 +131,7 @@
         const copyButton = copyIcon?.closest?.("button");
 
         const exact = actionBarFromButton(editButton || copyButton);
-        if (exact) return exact;
+        if (exact) return useNativeUserActionVisibility(turn, exact);
       }
 
       const actionButton = firstElement(turn, [
@@ -127,11 +146,14 @@
       ]);
       if (!actionButton) return null;
 
-      return (
+      const actionBar =
         actionButton.closest(
           ".buttons-container-v2, .buttons-container, .response-actions, .actions-container, [class*='action-buttons'], [class*='buttons-container']"
-        ) || actionBarFromButton(actionButton)
-      );
+        ) || actionBarFromButton(actionButton);
+
+      return role === ROLE_USER
+        ? useNativeUserActionVisibility(turn, actionBar)
+        : actionBar;
     },
 
     getDirectionTarget(message, role) {
