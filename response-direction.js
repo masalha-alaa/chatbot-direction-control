@@ -5,34 +5,74 @@
   const RTL_CLASS = "cgpt-force-rtl";
   const LTR_CLASS = "cgpt-force-ltr";
   const USER_TARGET_CLASS = "cgpt-user-direction-target";
-  const MESSAGE_SELECTOR = '[data-message-author-role="assistant"], [data-message-author-role="user"]';
+  const GEMINI_TARGET_CLASS = "cgpt-gemini-direction-target";
+  const isGemini = location.hostname === "gemini.google.com";
   let timer = null;
 
   function conversationKey() {
     return `${location.origin}${location.pathname}`;
   }
 
+  function getRole(node) {
+    const chatGptRole = node.getAttribute?.("data-message-author-role");
+    if (chatGptRole === "assistant" || chatGptRole === "user") return chatGptRole;
+
+    if (node.matches?.('user-query, .user-query, [data-message-author="user"]')) {
+      return "user";
+    }
+
+    if (node.matches?.('model-response, .model-response-container, [data-message-author="assistant"]')) {
+      return "assistant";
+    }
+
+    return null;
+  }
+
+  function getMessages() {
+    if (!isGemini) {
+      return [...document.querySelectorAll(
+        '[data-message-author-role="assistant"], [data-message-author-role="user"]'
+      )];
+    }
+
+    const primary = [...document.querySelectorAll("user-query, model-response")];
+    if (primary.length) return primary;
+
+    return [...document.querySelectorAll(
+      '.user-query, [data-message-author="user"], .model-response-container, [data-message-author="assistant"]'
+    )];
+  }
+
   function getTurn(node) {
-    return node.closest("article")
-      || node.closest('[data-testid^="conversation-turn-"]')
-      || node.parentElement;
+    if (!isGemini) {
+      return node.closest("article")
+        || node.closest('[data-testid^="conversation-turn-"]')
+        || node.parentElement;
+    }
+
+    return node.closest(
+      ".user-query-container, .model-response-container, .response-container, user-query, model-response"
+    ) || node.parentElement;
   }
 
   function getMessageId(node, turn) {
     const idNode =
-      node.closest("[data-message-id]")
-      || node.querySelector("[data-message-id]")
+      node.closest?.("[data-message-id]")
+      || node.querySelector?.("[data-message-id]")
       || turn?.querySelector?.("[data-message-id]");
 
     const messageId = idNode?.getAttribute?.("data-message-id");
     if (messageId) return `message:${messageId}`;
 
     const testId = turn?.getAttribute?.("data-testid")
-      || node.getAttribute?.("data-testid");
+      || node.getAttribute?.("data-testid")
+      || node.getAttribute?.("data-test-id");
     if (testId) return `turn:${testId}`;
 
-    const role = node.getAttribute("data-message-author-role") || "message";
-    const sameRoleMessages = [...document.querySelectorAll(`[data-message-author-role="${role}"]`)];
+    if (node.id) return `id:${node.id}`;
+
+    const role = getRole(node) || "message";
+    const sameRoleMessages = getMessages().filter((message) => getRole(message) === role);
     return `${role}:index:${Math.max(0, sameRoleMessages.indexOf(node))}`;
   }
 
@@ -40,7 +80,7 @@
     return `cgpt-direction|${conversationKey()}|${messageId}`;
   }
 
-  function findActionBar(turn) {
+  function findChatGptActionBar(turn) {
     if (!turn) return null;
 
     const actionButton =
@@ -63,7 +103,48 @@
     return bar;
   }
 
-  function getUserTextTarget(node) {
+  function findGeminiActionBar(turn) {
+    if (!turn) return null;
+
+    const actionSelector = [
+      'button[aria-label*="Copy" i]',
+      'button[aria-label*="Edit" i]',
+      'button[aria-label*="More" i]',
+      'button[aria-label*="option" i]',
+      'button[aria-label*="Redo" i]',
+      'button[aria-label*="Retry" i]',
+      'button[aria-label*="Good" i]',
+      'button[aria-label*="Bad" i]'
+    ].join(",");
+
+    const scopes = [turn, turn.parentElement, turn.parentElement?.parentElement]
+      .filter(Boolean);
+
+    for (const scope of scopes) {
+      // Do not climb into the full conversation history, where we could pick
+      // another turn's action bar.
+      if (scope.matches?.("infinite-scroller, .chat-history")) break;
+
+      const button = scope.querySelector?.(actionSelector);
+      if (!button) continue;
+
+      const bar = button.closest?.(
+        ".buttons-container, .response-actions, .actions-container, [class*='action-buttons'], [class*='buttons-container']"
+      ) || button.parentElement;
+
+      if (bar) return bar;
+    }
+
+    return null;
+  }
+
+  function findActionBar(turn) {
+    return isGemini
+      ? findGeminiActionBar(turn)
+      : findChatGptActionBar(turn);
+  }
+
+  function getChatGptUserTextTarget(node) {
     const target =
       node.querySelector(".whitespace-pre-wrap")
       || node.querySelector('[class*="whitespace-pre-wrap"]')
@@ -72,33 +153,64 @@
     return target instanceof HTMLElement ? target : null;
   }
 
-  function applyModeClasses(node, mode) {
-    const isUser = node.getAttribute("data-message-author-role") === "user";
+  function getGeminiTextTarget(node) {
+    const role = getRole(node);
 
-    // Clean up the old implementation, which put direction classes on the
-    // whole user-message container and could move the bubble itself.
+    const target = role === "user"
+      ? (
+          node.querySelector(".query-text")
+          || node.querySelector('[class*="query-text"]')
+          || node.querySelector(".query-content")
+        )
+      : (
+          node.querySelector("message-content")
+          || node.querySelector(".model-response-text")
+          || node.querySelector(".response-content")
+          || node.querySelector(".markdown-main-panel")
+          || node.querySelector(".markdown")
+        );
+
+    return target instanceof HTMLElement ? target : null;
+  }
+
+  function applyModeClasses(node, mode) {
+    // Remove direction from message containers themselves. User bubbles must
+    // stay exactly where the host UI places them.
     node.classList.remove(RTL_CLASS, LTR_CLASS);
 
-    const turn = getTurn(node);
-    turn?.querySelectorAll(".cgpt-user-actions-ltr, .cgpt-user-actions-rtl")
-      .forEach((element) => {
-        element.classList.remove("cgpt-user-actions-ltr", "cgpt-user-actions-rtl");
-      });
+    for (const oldTarget of node.querySelectorAll(
+      `.${USER_TARGET_CLASS}, .${GEMINI_TARGET_CLASS}`
+    )) {
+      oldTarget.classList.remove(
+        RTL_CLASS,
+        LTR_CLASS,
+        USER_TARGET_CLASS,
+        GEMINI_TARGET_CLASS
+      );
+    }
 
-    if (!isUser) {
-      if (mode === "rtl") node.classList.add(RTL_CLASS);
-      if (mode === "ltr") node.classList.add(LTR_CLASS);
+    if (!isGemini) {
+      const role = getRole(node);
+
+      if (role === "assistant") {
+        if (mode === "rtl") node.classList.add(RTL_CLASS);
+        if (mode === "ltr") node.classList.add(LTR_CLASS);
+        return;
+      }
+
+      const target = getChatGptUserTextTarget(node);
+      if (!target) return;
+
+      target.classList.add(USER_TARGET_CLASS);
+      if (mode === "rtl") target.classList.add(RTL_CLASS);
+      if (mode === "ltr") target.classList.add(LTR_CLASS);
       return;
     }
 
-    for (const oldTarget of node.querySelectorAll(`.${USER_TARGET_CLASS}`)) {
-      oldTarget.classList.remove(RTL_CLASS, LTR_CLASS, USER_TARGET_CLASS);
-    }
-
-    const target = getUserTextTarget(node);
+    const target = getGeminiTextTarget(node);
     if (!target) return;
 
-    target.classList.add(USER_TARGET_CLASS);
+    target.classList.add(GEMINI_TARGET_CLASS);
     if (mode === "rtl") target.classList.add(RTL_CLASS);
     if (mode === "ltr") target.classList.add(LTR_CLASS);
   }
@@ -176,10 +288,14 @@
 
   async function inject(node) {
     if (!(node instanceof HTMLElement)) return;
+    if (!getRole(node)) return;
 
     const turn = getTurn(node);
     if (!turn) return;
 
+    // The native action bar is also our completion signal. In particular,
+    // Gemini and ChatGPT do not expose their final action controls until the
+    // generated response is ready.
     const actionBar = findActionBar(turn);
     if (!actionBar) return;
 
@@ -198,6 +314,7 @@
     const messageId = getMessageId(node, turn);
     const toolbar = document.createElement("span");
     toolbar.className = TOOLBAR_CLASS;
+    toolbar.dataset.host = isGemini ? "gemini" : "chatgpt";
     toolbar.setAttribute("role", "group");
     toolbar.setAttribute("aria-label", "Message text direction");
 
@@ -216,9 +333,7 @@
   }
 
   function process() {
-    document
-      .querySelectorAll(MESSAGE_SELECTOR)
-      .forEach(inject);
+    getMessages().forEach(inject);
   }
 
   function schedule() {
@@ -233,5 +348,6 @@
     subtree: true
   });
 
+  // Safety net for host-framework updates after streaming/rendering finishes.
   setInterval(process, 750);
 })();
