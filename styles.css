@@ -1,44 +1,14 @@
-[data-message-author-role="assistant"].cgpt-force-rtl,
-[data-message-author-role="user"].cgpt-force-rtl {
+[data-message-author-role="assistant"].cgpt-force-rtl {
   direction: rtl !important;
   text-align: right !important;
 }
 
-[data-message-author-role="assistant"].cgpt-force-ltr,
-[data-message-author-role="user"].cgpt-force-ltr {
+[data-message-author-role="assistant"].cgpt-force-ltr {
   direction: ltr !important;
   text-align: left !important;
 }
 
-[data-message-author-role="user"].cgpt-force-ltr {
-  align-self: flex-start !important;
-  margin-inline-start: 0 !important;
-  margin-inline-end: auto !important;
-}
-
-[data-message-author-role="user"].cgpt-force-rtl {
-  align-self: flex-end !important;
-  margin-inline-start: auto !important;
-  margin-inline-end: 0 !important;
-}
-
-.cgpt-user-actions-ltr {
-  align-self: flex-start !important;
-  margin-inline-start: 0 !important;
-  margin-inline-end: auto !important;
-}
-
-.cgpt-user-actions-rtl {
-  align-self: flex-end !important;
-  margin-inline-start: auto !important;
-  margin-inline-end: 0 !important;
-}
-
 [data-message-author-role="assistant"].cgpt-force-rtl :where(
-  p, div.markdown, h1, h2, h3, h4, h5, h6,
-  ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
-),
-[data-message-author-role="user"].cgpt-force-rtl :where(
   p, div.markdown, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
@@ -49,19 +19,24 @@
 [data-message-author-role="assistant"].cgpt-force-ltr :where(
   p, div.markdown, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
-),
-[data-message-author-role="user"].cgpt-force-ltr :where(
-  p, div.markdown, h1, h2, h3, h4, h5, h6,
-  ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
+  direction: ltr !important;
+  text-align: left !important;
+}
+
+[data-message-author-role="user"] .cgpt-user-direction-target.cgpt-force-rtl {
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+[data-message-author-role="user"] .cgpt-user-direction-target.cgpt-force-ltr {
   direction: ltr !important;
   text-align: left !important;
 }
 
 [data-message-author-role="assistant"].cgpt-force-rtl :where(pre, pre *, code, kbd, samp),
 [data-message-author-role="assistant"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp),
-[data-message-author-role="user"].cgpt-force-rtl :where(pre, pre *, code, kbd, samp),
-[data-message-author-role="user"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp) {
+[data-message-author-role="user"] .cgpt-user-direction-target :where(pre, pre *, code, kbd, samp) {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: isolate !important;
