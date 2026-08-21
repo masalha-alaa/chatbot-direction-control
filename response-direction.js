@@ -1,267 +1,132 @@
 (() => {
   "use strict";
 
+  /**
+   * Generic per-message direction controller.
+   *
+   * This file owns storage, buttons, persistence and DOM observation. It knows
+   * nothing about ChatGPT/Gemini selectors; those live in site-adapters.js.
+   */
+
+  const extensionApi = globalThis.ChatDirectionControl;
+  const site = extensionApi?.getCurrentSiteAdapter?.();
+  if (!site) return;
+
   const TOOLBAR_CLASS = "cgpt-direction-toolbar";
+  const BUTTON_CLASS = "cgpt-direction-button";
+  const ACTIVE_BUTTON_CLASS = "cgpt-direction-active";
+  const DIRECTION_TARGET_CLASS = "cgpt-direction-target";
   const RTL_CLASS = "cgpt-force-rtl";
   const LTR_CLASS = "cgpt-force-ltr";
-  const USER_TARGET_CLASS = "cgpt-user-direction-target";
-  const GEMINI_TARGET_CLASS = "cgpt-gemini-direction-target";
-  const isGemini = location.hostname === "gemini.google.com";
-  let timer = null;
+
+  const DIRECTION_LTR = "ltr";
+  const DIRECTION_RTL = "rtl";
+  const STORAGE_PREFIX = "cgpt-direction";
+
+  // Debounce rapid framework mutations, then periodically rescan as a safety
+  // net for action bars replaced asynchronously after streaming completes.
+  const MUTATION_DEBOUNCE_MS = 100;
+  const SAFETY_RESCAN_INTERVAL_MS = 750;
+
+  let scheduledScan = null;
 
   function conversationKey() {
     return `${location.origin}${location.pathname}`;
   }
 
-  function getRole(node) {
-    const chatGptRole = node.getAttribute?.("data-message-author-role");
-    if (chatGptRole === "assistant" || chatGptRole === "user") return chatGptRole;
-
-    if (node.matches?.('user-query, .user-query, [data-message-author="user"]')) {
-      return "user";
-    }
-
-    if (node.matches?.('model-response, .model-response-container, [data-message-author="assistant"]')) {
-      return "assistant";
-    }
-
-    return null;
-  }
-
-  function getMessages() {
-    if (!isGemini) {
-      return [...document.querySelectorAll(
-        '[data-message-author-role="assistant"], [data-message-author-role="user"]'
-      )];
-    }
-
-    const primary = [...document.querySelectorAll("user-query, model-response")];
-    if (primary.length) return primary;
-
-    return [...document.querySelectorAll(
-      '.user-query, [data-message-author="user"], .model-response-container, [data-message-author="assistant"]'
-    )];
-  }
-
-  function getTurn(node) {
-    if (!isGemini) {
-      return node.closest("article")
-        || node.closest('[data-testid^="conversation-turn-"]')
-        || node.parentElement;
-    }
-
-    return node.closest("user-query, model-response")
-      || node.closest(".user-query-container, .model-response-container, .response-container")
-      || node;
-  }
-
-  function getMessageId(node, turn) {
+  function getMessageId(message, turn) {
     const idNode =
-      node.closest?.("[data-message-id]")
-      || node.querySelector?.("[data-message-id]")
-      || turn?.querySelector?.("[data-message-id]");
+      message.closest?.("[data-message-id]") ||
+      message.querySelector?.("[data-message-id]") ||
+      turn?.querySelector?.("[data-message-id]");
 
     const messageId = idNode?.getAttribute?.("data-message-id");
     if (messageId) return `message:${messageId}`;
 
-    const testId = turn?.getAttribute?.("data-testid")
-      || node.getAttribute?.("data-testid")
-      || node.getAttribute?.("data-test-id");
+    const testId =
+      turn?.getAttribute?.("data-testid") ||
+      message.getAttribute?.("data-testid") ||
+      message.getAttribute?.("data-test-id");
     if (testId) return `turn:${testId}`;
 
-    if (node.id) return `id:${node.id}`;
+    if (message.id) return `id:${message.id}`;
 
-    const role = getRole(node) || "message";
-    const sameRoleMessages = getMessages().filter((message) => getRole(message) === role);
-    return `${role}:index:${Math.max(0, sameRoleMessages.indexOf(node))}`;
+    // Last-resort ID for hosts that expose no stable message identifier.
+    // It remains deterministic within the current conversation ordering.
+    const role = site.getRole(message) || "message";
+    const sameRoleMessages = site
+      .getMessages()
+      .filter((candidate) => site.getRole(candidate) === role);
+    return `${role}:index:${Math.max(0, sameRoleMessages.indexOf(message))}`;
   }
 
   function storageKey(messageId) {
-    return `cgpt-direction|${conversationKey()}|${messageId}`;
+    return `${STORAGE_PREFIX}|${conversationKey()}|${messageId}`;
   }
 
-  function findChatGptActionBar(turn) {
-    if (!turn) return null;
+  function clearDirectionClasses(message) {
+    message.classList.remove(
+      DIRECTION_TARGET_CLASS,
+      RTL_CLASS,
+      LTR_CLASS
+    );
 
-    const actionButton =
-      turn.querySelector('[data-testid="copy-turn-action-button"]')
-      || turn.querySelector('button[data-testid*="turn-action"]')
-      || turn.querySelector('button[data-testid*="copy"]')
-      || turn.querySelector('button[data-testid*="edit"]');
-
-    if (!actionButton) return null;
-
-    let bar = actionButton.parentElement;
-
-    if (bar && bar.querySelectorAll("button").length <= 1) {
-      const parent = bar.parentElement;
-      if (parent && parent.querySelectorAll("button").length >= 1) {
-        bar = parent;
-      }
-    }
-
-    return bar;
-  }
-
-  function actionBarFromButton(button) {
-    if (!button) return null;
-
-    let bar = button.parentElement;
-    let fallback = bar;
-
-    for (let i = 0; bar && i < 4; i += 1) {
-      if (bar.querySelectorAll("button").length >= 2) return bar;
-      fallback = bar;
-      bar = bar.parentElement;
-    }
-
-    return fallback;
-  }
-
-  function findGeminiActionBar(turn, role) {
-    if (!turn) return null;
-
-    if (role === "assistant") {
-      const exact =
-        turn.querySelector("message-actions .buttons-container-v2")
-        || turn.querySelector(".response-container-footer .buttons-container-v2")
-        || turn.querySelector(".response-container-footer");
-      if (exact) return exact;
-    } else {
-      const editHost = turn.querySelector('[data-test-id="prompt-edit-button"]');
-      const editButton = editHost?.matches?.("button")
-        ? editHost
-        : editHost?.querySelector?.("button");
-
-      const copyIcon = turn.querySelector(
-        'mat-icon[fonticon="content_copy"], mat-icon[fonticon="copy"], mat-icon[data-mat-icon-name="content_copy"], mat-icon[data-mat-icon-name="copy"]'
-      );
-      const copyButton = copyIcon?.closest?.("button");
-
-      const exact = actionBarFromButton(editButton || copyButton);
-      if (exact) return exact;
-    }
-
-    const actionButton =
-      turn.querySelector('button[aria-label*="Copy" i]')
-      || turn.querySelector('[data-test-id="prompt-edit-button"] button')
-      || turn.querySelector('button[data-test-id="prompt-edit-button"]')
-      || turn.querySelector('button[aria-label*="Edit" i]')
-      || turn.querySelector('button[aria-label*="More" i]')
-      || turn.querySelector('button[aria-label*="option" i]')
-      || turn.querySelector('button[aria-label*="Redo" i]')
-      || turn.querySelector('button[aria-label*="Retry" i]');
-
-    if (!actionButton) return null;
-
-    return actionButton.closest?.(
-      ".buttons-container-v2, .buttons-container, .response-actions, .actions-container, [class*='action-buttons'], [class*='buttons-container']"
-    ) || actionBarFromButton(actionButton);
-  }
-
-  function findActionBar(turn, role) {
-    return isGemini
-      ? findGeminiActionBar(turn, role)
-      : findChatGptActionBar(turn);
-  }
-
-  function getChatGptUserTextTarget(node) {
-    const target =
-      node.querySelector(".whitespace-pre-wrap")
-      || node.querySelector('[class*="whitespace-pre-wrap"]')
-      || node.querySelector(".markdown");
-
-    return target instanceof HTMLElement ? target : null;
-  }
-
-  function getGeminiTextTarget(node) {
-    const role = getRole(node);
-
-    const target = role === "user"
-      ? (
-          node.querySelector(".query-text")
-          || node.querySelector('[class*="query-text"]')
-          || node.querySelector(".query-content")
-        )
-      : (
-          node.querySelector(".markdown.markdown-main-panel")
-          || node.querySelector(".markdown-main-panel")
-          || node.querySelector("message-content .markdown")
-          || node.querySelector("message-content")
-          || node.querySelector(".model-response-text")
-          || node.querySelector(".response-content")
-          || node.querySelector(".markdown")
-        );
-
-    return target instanceof HTMLElement ? target : null;
-  }
-
-  function applyModeClasses(node, mode) {
-    // Never put direction on a user-message container. Only its text target
-    // changes; the host UI keeps ownership of bubble placement and actions.
-    node.classList.remove(RTL_CLASS, LTR_CLASS);
-
-    for (const oldTarget of node.querySelectorAll(
-      `.${USER_TARGET_CLASS}, .${GEMINI_TARGET_CLASS}`
-    )) {
-      oldTarget.classList.remove(
+    for (const target of message.querySelectorAll(`.${DIRECTION_TARGET_CLASS}`)) {
+      target.classList.remove(
+        DIRECTION_TARGET_CLASS,
         RTL_CLASS,
-        LTR_CLASS,
-        USER_TARGET_CLASS,
-        GEMINI_TARGET_CLASS
+        LTR_CLASS
       );
     }
-
-    if (!isGemini) {
-      const role = getRole(node);
-
-      if (role === "assistant") {
-        if (mode === "rtl") node.classList.add(RTL_CLASS);
-        if (mode === "ltr") node.classList.add(LTR_CLASS);
-        return;
-      }
-
-      const target = getChatGptUserTextTarget(node);
-      if (!target) return;
-
-      target.classList.add(USER_TARGET_CLASS);
-      if (mode === "rtl") target.classList.add(RTL_CLASS);
-      if (mode === "ltr") target.classList.add(LTR_CLASS);
-      return;
-    }
-
-    const target = getGeminiTextTarget(node);
-    if (!target) return;
-
-    target.classList.add(GEMINI_TARGET_CLASS);
-    if (mode === "rtl") target.classList.add(RTL_CLASS);
-    if (mode === "ltr") target.classList.add(LTR_CLASS);
   }
 
-  function setMode(node, mode) {
-    applyModeClasses(node, mode);
+  function applyModeClasses(message, mode) {
+    clearDirectionClasses(message);
 
-    if (mode === "rtl" || mode === "ltr") {
-      node.dataset.cgptDirection = mode;
+    const role = site.getRole(message);
+    if (!role) return;
+
+    const target = site.getDirectionTarget(message, role);
+    if (!(target instanceof HTMLElement)) return;
+
+    target.classList.add(DIRECTION_TARGET_CLASS);
+    if (mode === DIRECTION_RTL) target.classList.add(RTL_CLASS);
+    if (mode === DIRECTION_LTR) target.classList.add(LTR_CLASS);
+  }
+
+  function findToolbar(message) {
+    const role = site.getRole(message);
+    const turn = site.getTurn(message);
+    const actionBar = site.findActionBar(turn, role);
+
+    return (
+      actionBar?.querySelector(`.${TOOLBAR_CLASS}`) ||
+      turn?.querySelector?.(`.${TOOLBAR_CLASS}`) ||
+      null
+    );
+  }
+
+  function setMode(message, mode) {
+    applyModeClasses(message, mode);
+
+    if (mode === DIRECTION_RTL || mode === DIRECTION_LTR) {
+      message.dataset.cgptDirection = mode;
     } else {
-      delete node.dataset.cgptDirection;
+      delete message.dataset.cgptDirection;
     }
 
-    const role = getRole(node);
-    const turn = getTurn(node);
-    const actionBar = findActionBar(turn, role);
-    const toolbar = actionBar?.querySelector(`.${TOOLBAR_CLASS}`)
-      || turn?.querySelector?.(`.${TOOLBAR_CLASS}`);
+    const toolbar = findToolbar(message);
     if (!toolbar) return;
 
-    for (const button of toolbar.querySelectorAll(".cgpt-direction-button")) {
+    for (const button of toolbar.querySelectorAll(`.${BUTTON_CLASS}`)) {
       const active = button.dataset.mode === mode;
-      button.classList.toggle("cgpt-direction-active", active);
+      button.classList.toggle(ACTIVE_BUTTON_CLASS, active);
       button.setAttribute("aria-pressed", String(active));
     }
   }
 
-  function icon(side) {
+  function alignmentIcon(side) {
+    // SVG path coordinates are icon geometry, not layout/behavior constants.
     return side === "left"
       ? `<svg viewBox="0 0 20 20" aria-hidden="true">
            <path d="M3 4.5h14M3 8h10M3 11.5h14M3 15h8"
@@ -275,107 +140,113 @@
          </svg>`;
   }
 
-  function makeButton(mode, node, messageId) {
+  function createDirectionButton(mode, message, messageId) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "cgpt-direction-button";
+    button.className = BUTTON_CLASS;
     button.dataset.mode = mode;
     button.setAttribute("aria-pressed", "false");
 
-    if (mode === "rtl") {
+    if (mode === DIRECTION_RTL) {
       button.title = "RTL + right align";
       button.setAttribute("aria-label", "Right-to-left + right align");
-      button.innerHTML = icon("right");
+      button.innerHTML = alignmentIcon("right");
     } else {
       button.title = "LTR + left align";
       button.setAttribute("aria-label", "Left-to-right + left align");
-      button.innerHTML = icon("left");
+      button.innerHTML = alignmentIcon("left");
     }
 
-    button.addEventListener("click", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
 
-      const current = node.dataset.cgptDirection;
-      const next = current === mode ? null : mode;
-      setMode(node, next);
+      const currentMode = message.dataset.cgptDirection;
+      const nextMode = currentMode === mode ? null : mode;
+      setMode(message, nextMode);
 
       try {
         const key = storageKey(messageId);
-        if (next) await chrome.storage.local.set({ [key]: next });
-        else await chrome.storage.local.remove(key);
-      } catch (err) {
-        console.debug("Direction extension storage error:", err);
+        if (nextMode) {
+          await chrome.storage.local.set({ [key]: nextMode });
+        } else {
+          await chrome.storage.local.remove(key);
+        }
+      } catch (error) {
+        console.debug("Direction extension storage error:", error);
       }
     });
 
     return button;
   }
 
-  async function inject(node) {
-    if (!(node instanceof HTMLElement)) return;
+  async function injectToolbar(message) {
+    if (!(message instanceof HTMLElement)) return;
 
-    const role = getRole(node);
+    const role = site.getRole(message);
     if (!role) return;
 
-    const turn = getTurn(node);
+    const turn = site.getTurn(message);
     if (!turn) return;
 
-    // The native action bar is also the completion signal for generated
-    // responses. Gemini exposes message-actions after the response settles.
-    const actionBar = findActionBar(turn, role);
+    // Native action controls are the completion signal for generated replies.
+    // Waiting for them prevents buttons from appearing during "Thinking...".
+    const actionBar = site.findActionBar(turn, role);
     if (!actionBar) return;
 
-    const existing = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
-    if (existing) {
-      const current = node.dataset.cgptDirection;
-      if (current === "rtl" || current === "ltr") {
-        applyModeClasses(node, current);
+    const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
+    if (existingToolbar) {
+      const currentMode = message.dataset.cgptDirection;
+      if (currentMode === DIRECTION_RTL || currentMode === DIRECTION_LTR) {
+        applyModeClasses(message, currentMode);
       }
       return;
     }
 
-    // Remove a stale toolbar only if the host framework moved/replaced the
-    // action bar for this same turn.
-    turn.querySelectorAll?.(`.${TOOLBAR_CLASS}`).forEach((toolbar) => toolbar.remove());
+    // React/Angular may replace an action bar after render. Remove only stale
+    // extension toolbars belonging to this same turn before inserting again.
+    turn
+      .querySelectorAll?.(`.${TOOLBAR_CLASS}`)
+      .forEach((toolbar) => toolbar.remove());
 
-    const messageId = getMessageId(node, turn);
+    const messageId = getMessageId(message, turn);
     const toolbar = document.createElement("span");
     toolbar.className = TOOLBAR_CLASS;
-    toolbar.dataset.host = isGemini ? "gemini" : "chatgpt";
+    toolbar.dataset.site = site.id;
     toolbar.setAttribute("role", "group");
     toolbar.setAttribute("aria-label", "Message text direction");
 
-    toolbar.appendChild(makeButton("ltr", node, messageId));
-    toolbar.appendChild(makeButton("rtl", node, messageId));
+    toolbar.appendChild(createDirectionButton(DIRECTION_LTR, message, messageId));
+    toolbar.appendChild(createDirectionButton(DIRECTION_RTL, message, messageId));
     actionBar.appendChild(toolbar);
 
     try {
       const key = storageKey(messageId);
       const saved = await chrome.storage.local.get(key);
-      const mode = saved[key];
-      if (mode === "rtl" || mode === "ltr") setMode(node, mode);
-    } catch (err) {
-      console.debug("Direction extension storage error:", err);
+      const savedMode = saved[key];
+      if (savedMode === DIRECTION_RTL || savedMode === DIRECTION_LTR) {
+        setMode(message, savedMode);
+      }
+    } catch (error) {
+      console.debug("Direction extension storage error:", error);
     }
   }
 
-  function process() {
-    getMessages().forEach(inject);
+  function scanMessages() {
+    site.getMessages().forEach(injectToolbar);
   }
 
-  function schedule() {
-    clearTimeout(timer);
-    timer = setTimeout(process, 100);
+  function scheduleScan() {
+    clearTimeout(scheduledScan);
+    scheduledScan = setTimeout(scanMessages, MUTATION_DEBOUNCE_MS);
   }
 
-  process();
+  scanMessages();
 
-  new MutationObserver(schedule).observe(document.documentElement, {
+  new MutationObserver(scheduleScan).observe(document.documentElement, {
     childList: true,
     subtree: true
   });
 
-  // Safety net for host-framework updates after streaming/rendering finishes.
-  setInterval(process, 750);
+  setInterval(scanMessages, SAFETY_RESCAN_INTERVAL_MS);
 })();
