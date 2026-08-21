@@ -4,8 +4,7 @@
   const TOOLBAR_CLASS = "cgpt-direction-toolbar";
   const RTL_CLASS = "cgpt-force-rtl";
   const LTR_CLASS = "cgpt-force-ltr";
-  const USER_ACTIONS_LTR_CLASS = "cgpt-user-actions-ltr";
-  const USER_ACTIONS_RTL_CLASS = "cgpt-user-actions-rtl";
+  const USER_TARGET_CLASS = "cgpt-user-direction-target";
   const MESSAGE_SELECTOR = '[data-message-author-role="assistant"], [data-message-author-role="user"]';
   let timer = null;
 
@@ -64,30 +63,57 @@
     return bar;
   }
 
-  function setMode(node, mode) {
+  function getUserTextTarget(node) {
+    const target =
+      node.querySelector(".whitespace-pre-wrap")
+      || node.querySelector('[class*="whitespace-pre-wrap"]')
+      || node.querySelector(".markdown");
+
+    return target instanceof HTMLElement ? target : null;
+  }
+
+  function applyModeClasses(node, mode) {
+    const isUser = node.getAttribute("data-message-author-role") === "user";
+
+    // Clean up the old implementation, which put direction classes on the
+    // whole user-message container and could move the bubble itself.
     node.classList.remove(RTL_CLASS, LTR_CLASS);
 
-    if (mode === "rtl") {
-      node.classList.add(RTL_CLASS);
-      node.dataset.cgptDirection = "rtl";
-    } else if (mode === "ltr") {
-      node.classList.add(LTR_CLASS);
-      node.dataset.cgptDirection = "ltr";
+    const turn = getTurn(node);
+    turn?.querySelectorAll(".cgpt-user-actions-ltr, .cgpt-user-actions-rtl")
+      .forEach((element) => {
+        element.classList.remove("cgpt-user-actions-ltr", "cgpt-user-actions-rtl");
+      });
+
+    if (!isUser) {
+      if (mode === "rtl") node.classList.add(RTL_CLASS);
+      if (mode === "ltr") node.classList.add(LTR_CLASS);
+      return;
+    }
+
+    for (const oldTarget of node.querySelectorAll(`.${USER_TARGET_CLASS}`)) {
+      oldTarget.classList.remove(RTL_CLASS, LTR_CLASS, USER_TARGET_CLASS);
+    }
+
+    const target = getUserTextTarget(node);
+    if (!target) return;
+
+    target.classList.add(USER_TARGET_CLASS);
+    if (mode === "rtl") target.classList.add(RTL_CLASS);
+    if (mode === "ltr") target.classList.add(LTR_CLASS);
+  }
+
+  function setMode(node, mode) {
+    applyModeClasses(node, mode);
+
+    if (mode === "rtl" || mode === "ltr") {
+      node.dataset.cgptDirection = mode;
     } else {
       delete node.dataset.cgptDirection;
     }
 
     const turn = getTurn(node);
     const toolbar = turn?.querySelector(`.${TOOLBAR_CLASS}`);
-    const actionBar = toolbar?.parentElement;
-    const isUser = node.getAttribute("data-message-author-role") === "user";
-
-    if (isUser && actionBar) {
-      actionBar.classList.remove(USER_ACTIONS_LTR_CLASS, USER_ACTIONS_RTL_CLASS);
-      if (mode === "ltr") actionBar.classList.add(USER_ACTIONS_LTR_CLASS);
-      if (mode === "rtl") actionBar.classList.add(USER_ACTIONS_RTL_CLASS);
-    }
-
     if (!toolbar) return;
 
     for (const button of toolbar.querySelectorAll(".cgpt-direction-button")) {
@@ -154,23 +180,18 @@
     const turn = getTurn(node);
     if (!turn) return;
 
-    /*
-      For assistant messages, the final action bar also prevents injection
-      during "Thinking..." / streaming. User messages already have their
-      action controls once rendered.
-    */
     const actionBar = findActionBar(turn);
     if (!actionBar) return;
 
-    /*
-      ChatGPT/React may replace an action bar after rendering. If an old
-      toolbar exists somewhere else in the turn, recreate it in the current
-      action bar.
-    */
     const existing = turn.querySelector(`.${TOOLBAR_CLASS}`);
     if (existing) {
-      if (existing.parentElement === actionBar) return;
-      existing.parentElement?.classList.remove(USER_ACTIONS_LTR_CLASS, USER_ACTIONS_RTL_CLASS);
+      if (existing.parentElement === actionBar) {
+        const current = node.dataset.cgptDirection;
+        if (current === "rtl" || current === "ltr") {
+          applyModeClasses(node, current);
+        }
+        return;
+      }
       existing.remove();
     }
 
@@ -212,6 +233,5 @@
     subtree: true
   });
 
-  // Safety net for React updates after streaming/rendering finishes.
   setInterval(process, 750);
 })();
