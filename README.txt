@@ -1,13 +1,15 @@
 ChatGPT Direction Control — v1.0.0
 
-Combined extension containing both previous extensions.
+Direction controls for ChatGPT and Gemini.
 
 Features:
-- Use Left/Right Ctrl + Shift to switch the message box to left/right alignment.
-- Change each ChatGPT response between left-to-right (CT R) and right-to-left (RTL)
-using the alignment icons shown below each response.
-- Each response can be adjusted independently.
+- Left Ctrl + Shift: LTR + left-align the active composer.
+- Right Ctrl + Shift: RTL + right-align the active composer.
+- Per-message LTR/RTL alignment icons for assistant responses and user messages.
+- User-message controls change only the text; they do not move the message bubble.
+- Direction settings are saved locally per message and restored when revisiting a conversation.
+- Supports ChatGPT and Gemini.
 
-Useful if you regularly switch between languages such as English, Arabic, and Hebrew,
+Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
 The extension works entirely on your computer. It does not collect, send, upload, or
 share your messages, settings, or any other data with external servers.

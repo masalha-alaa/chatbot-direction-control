@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChatGPT Direction Control",
   "version": "1.0.0",
-  "description": "Adds per-response LTR/RTL controls and keyboard shortcuts for switching the ChatGPT composer direction.",
+  "description": "Adds per-message LTR/RTL controls and composer direction shortcuts to ChatGPT and Gemini.",
   "permissions": [
     "storage"
   ],
@@ -10,9 +10,13 @@
     {
       "matches": [
         "https://chatgpt.com/*",
-        "https://chat.openai.com/*"
+        "https://chat.openai.com/*",
+        "https://gemini.google.com/*"
       ],
       "js": [
+        "site-adapter-registry.js",
+        "adapters/chatgpt.js",
+        "adapters/gemini.js",
         "composer-direction.js",
         "response-direction.js"
       ],

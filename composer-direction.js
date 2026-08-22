@@ -1,93 +1,69 @@
 (() => {
   "use strict";
 
-  const pressed = new Set();
+  /**
+   * Generic composer keyboard-shortcut controller.
+   * Site-specific editor discovery is delegated to site-adapters.js.
+   */
 
-  function isEditable(element) {
-    if (!element) return false;
+  const extensionApi = globalThis.ChatDirectionControl;
+  const site = extensionApi?.getCurrentSiteAdapter?.();
+  if (!site) return;
 
-    return (
-      element.tagName === "TEXTAREA" ||
-      element.tagName === "INPUT" ||
-      element.isContentEditable ||
-      Boolean(element.closest?.('[contenteditable="true"]'))
-    );
-  }
+  const COMPOSER_BLOCK_SELECTOR = "p, div";
+  const LEFT_CHORD = Object.freeze(["ControlLeft", "ShiftLeft"]);
+  const RIGHT_CHORD = Object.freeze(["ControlRight", "ShiftRight"]);
+  const DIRECTION_LTR = "ltr";
+  const DIRECTION_RTL = "rtl";
 
-  function findComposerEditor() {
-    const active = document.activeElement;
-    if (!isEditable(active)) return null;
-
-    const editor =
-      active.closest?.('[contenteditable="true"]') ||
-      active.closest?.("textarea") ||
-      active.closest?.("input") ||
-      active;
-
-    // Restrict the shortcut to the ChatGPT composer area.
-    const composer =
-      editor.closest?.('form') ||
-      editor.closest?.('[data-testid*="composer"]') ||
-      editor.closest?.('[class*="composer"]');
-
-    if (!composer) return null;
-
-    return editor;
-  }
+  const directionKeys = new Set([
+    ...LEFT_CHORD,
+    ...RIGHT_CHORD
+  ]);
+  const pressedKeys = new Set();
 
   function setDirection(editor, direction) {
-    const isRtl = direction === "rtl";
+    const textAlign = direction === DIRECTION_RTL ? "right" : "left";
 
     editor.setAttribute("dir", direction);
     editor.style.setProperty("direction", direction, "important");
-    editor.style.setProperty("text-align", isRtl ? "right" : "left", "important");
+    editor.style.setProperty("text-align", textAlign, "important");
 
-    // ChatGPT commonly uses a contenteditable element with child paragraphs.
-    // Apply alignment there too, so existing text changes immediately.
+    // Contenteditable editors often store each visual line in child blocks.
+    // Updating those blocks makes already-entered text move immediately.
     if (editor.isContentEditable) {
-      for (const child of editor.querySelectorAll("p, div")) {
+      for (const child of editor.querySelectorAll(COMPOSER_BLOCK_SELECTOR)) {
         child.style.setProperty("direction", direction, "important");
-        child.style.setProperty("text-align", isRtl ? "right" : "left", "important");
+        child.style.setProperty("text-align", textAlign, "important");
       }
     }
 
-    // Keep focus/caret in the editor.
+    // Preserve the user's caret/focus after changing direction.
     editor.focus({ preventScroll: true });
   }
 
-  function matchesChord(side) {
-    if (side === "right") {
-      return pressed.has("ControlRight") && pressed.has("ShiftRight");
-    }
-
-    return pressed.has("ControlLeft") && pressed.has("ShiftLeft");
+  function chordIsPressed(chord) {
+    return chord.every((keyCode) => pressedKeys.has(keyCode));
   }
 
   document.addEventListener(
     "keydown",
     (event) => {
-      if (
-        event.code !== "ControlLeft" &&
-        event.code !== "ControlRight" &&
-        event.code !== "ShiftLeft" &&
-        event.code !== "ShiftRight"
-      ) {
-        return;
-      }
+      if (!directionKeys.has(event.code)) return;
 
-      pressed.add(event.code);
+      pressedKeys.add(event.code);
 
-      const editor = findComposerEditor();
+      const editor = site.findComposerEditor(document.activeElement);
       if (!editor) return;
 
-      if (matchesChord("right")) {
+      if (chordIsPressed(RIGHT_CHORD)) {
         event.preventDefault();
         event.stopPropagation();
-        setDirection(editor, "rtl");
-      } else if (matchesChord("left")) {
+        setDirection(editor, DIRECTION_RTL);
+      } else if (chordIsPressed(LEFT_CHORD)) {
         event.preventDefault();
         event.stopPropagation();
-        setDirection(editor, "ltr");
+        setDirection(editor, DIRECTION_LTR);
       }
     },
     true
@@ -96,10 +72,10 @@
   document.addEventListener(
     "keyup",
     (event) => {
-      pressed.delete(event.code);
+      pressedKeys.delete(event.code);
     },
     true
   );
 
-  window.addEventListener("blur", () => pressed.clear());
+  window.addEventListener("blur", () => pressedKeys.clear());
 })();

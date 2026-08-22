@@ -1,129 +1,132 @@
 (() => {
   "use strict";
 
+  /**
+   * Generic per-message direction controller.
+   *
+   * This file owns storage, buttons, persistence and DOM observation. It knows
+   * nothing about ChatGPT/Gemini selectors; those live in site-adapters.js.
+   */
+
+  const extensionApi = globalThis.ChatDirectionControl;
+  const site = extensionApi?.getCurrentSiteAdapter?.();
+  if (!site) return;
+
   const TOOLBAR_CLASS = "cgpt-direction-toolbar";
+  const BUTTON_CLASS = "cgpt-direction-button";
+  const ACTIVE_BUTTON_CLASS = "cgpt-direction-active";
+  const DIRECTION_TARGET_CLASS = "cgpt-direction-target";
   const RTL_CLASS = "cgpt-force-rtl";
   const LTR_CLASS = "cgpt-force-ltr";
-  const USER_TARGET_CLASS = "cgpt-user-direction-target";
-  const MESSAGE_SELECTOR = '[data-message-author-role="assistant"], [data-message-author-role="user"]';
-  let timer = null;
+
+  const DIRECTION_LTR = "ltr";
+  const DIRECTION_RTL = "rtl";
+  const STORAGE_PREFIX = "cgpt-direction";
+
+  // Debounce rapid framework mutations, then periodically rescan as a safety
+  // net for action bars replaced asynchronously after streaming completes.
+  const MUTATION_DEBOUNCE_MS = 100;
+  const SAFETY_RESCAN_INTERVAL_MS = 750;
+
+  let scheduledScan = null;
 
   function conversationKey() {
     return `${location.origin}${location.pathname}`;
   }
 
-  function getTurn(node) {
-    return node.closest("article")
-      || node.closest('[data-testid^="conversation-turn-"]')
-      || node.parentElement;
-  }
-
-  function getMessageId(node, turn) {
+  function getMessageId(message, turn) {
     const idNode =
-      node.closest("[data-message-id]")
-      || node.querySelector("[data-message-id]")
-      || turn?.querySelector?.("[data-message-id]");
+      message.closest?.("[data-message-id]") ||
+      message.querySelector?.("[data-message-id]") ||
+      turn?.querySelector?.("[data-message-id]");
 
     const messageId = idNode?.getAttribute?.("data-message-id");
     if (messageId) return `message:${messageId}`;
 
-    const testId = turn?.getAttribute?.("data-testid")
-      || node.getAttribute?.("data-testid");
+    const testId =
+      turn?.getAttribute?.("data-testid") ||
+      message.getAttribute?.("data-testid") ||
+      message.getAttribute?.("data-test-id");
     if (testId) return `turn:${testId}`;
 
-    const role = node.getAttribute("data-message-author-role") || "message";
-    const sameRoleMessages = [...document.querySelectorAll(`[data-message-author-role="${role}"]`)];
-    return `${role}:index:${Math.max(0, sameRoleMessages.indexOf(node))}`;
+    if (message.id) return `id:${message.id}`;
+
+    // Last-resort ID for hosts that expose no stable message identifier.
+    // It remains deterministic within the current conversation ordering.
+    const role = site.getRole(message) || "message";
+    const sameRoleMessages = site
+      .getMessages()
+      .filter((candidate) => site.getRole(candidate) === role);
+    return `${role}:index:${Math.max(0, sameRoleMessages.indexOf(message))}`;
   }
 
   function storageKey(messageId) {
-    return `cgpt-direction|${conversationKey()}|${messageId}`;
+    return `${STORAGE_PREFIX}|${conversationKey()}|${messageId}`;
   }
 
-  function findActionBar(turn) {
-    if (!turn) return null;
+  function clearDirectionClasses(message) {
+    message.classList.remove(
+      DIRECTION_TARGET_CLASS,
+      RTL_CLASS,
+      LTR_CLASS
+    );
 
-    const actionButton =
-      turn.querySelector('[data-testid="copy-turn-action-button"]')
-      || turn.querySelector('button[data-testid*="turn-action"]')
-      || turn.querySelector('button[data-testid*="copy"]')
-      || turn.querySelector('button[data-testid*="edit"]');
-
-    if (!actionButton) return null;
-
-    let bar = actionButton.parentElement;
-
-    if (bar && bar.querySelectorAll("button").length <= 1) {
-      const parent = bar.parentElement;
-      if (parent && parent.querySelectorAll("button").length >= 1) {
-        bar = parent;
-      }
+    for (const target of message.querySelectorAll(`.${DIRECTION_TARGET_CLASS}`)) {
+      target.classList.remove(
+        DIRECTION_TARGET_CLASS,
+        RTL_CLASS,
+        LTR_CLASS
+      );
     }
-
-    return bar;
   }
 
-  function getUserTextTarget(node) {
-    const target =
-      node.querySelector(".whitespace-pre-wrap")
-      || node.querySelector('[class*="whitespace-pre-wrap"]')
-      || node.querySelector(".markdown");
+  function applyModeClasses(message, mode) {
+    clearDirectionClasses(message);
 
-    return target instanceof HTMLElement ? target : null;
+    const role = site.getRole(message);
+    if (!role) return;
+
+    const target = site.getDirectionTarget(message, role);
+    if (!(target instanceof HTMLElement)) return;
+
+    target.classList.add(DIRECTION_TARGET_CLASS);
+    if (mode === DIRECTION_RTL) target.classList.add(RTL_CLASS);
+    if (mode === DIRECTION_LTR) target.classList.add(LTR_CLASS);
   }
 
-  function applyModeClasses(node, mode) {
-    const isUser = node.getAttribute("data-message-author-role") === "user";
+  function findToolbar(message) {
+    const role = site.getRole(message);
+    const turn = site.getTurn(message);
+    const actionBar = site.findActionBar(turn, role);
 
-    // Clean up the old implementation, which put direction classes on the
-    // whole user-message container and could move the bubble itself.
-    node.classList.remove(RTL_CLASS, LTR_CLASS);
-
-    const turn = getTurn(node);
-    turn?.querySelectorAll(".cgpt-user-actions-ltr, .cgpt-user-actions-rtl")
-      .forEach((element) => {
-        element.classList.remove("cgpt-user-actions-ltr", "cgpt-user-actions-rtl");
-      });
-
-    if (!isUser) {
-      if (mode === "rtl") node.classList.add(RTL_CLASS);
-      if (mode === "ltr") node.classList.add(LTR_CLASS);
-      return;
-    }
-
-    for (const oldTarget of node.querySelectorAll(`.${USER_TARGET_CLASS}`)) {
-      oldTarget.classList.remove(RTL_CLASS, LTR_CLASS, USER_TARGET_CLASS);
-    }
-
-    const target = getUserTextTarget(node);
-    if (!target) return;
-
-    target.classList.add(USER_TARGET_CLASS);
-    if (mode === "rtl") target.classList.add(RTL_CLASS);
-    if (mode === "ltr") target.classList.add(LTR_CLASS);
+    return (
+      actionBar?.querySelector(`.${TOOLBAR_CLASS}`) ||
+      turn?.querySelector?.(`.${TOOLBAR_CLASS}`) ||
+      null
+    );
   }
 
-  function setMode(node, mode) {
-    applyModeClasses(node, mode);
+  function setMode(message, mode) {
+    applyModeClasses(message, mode);
 
-    if (mode === "rtl" || mode === "ltr") {
-      node.dataset.cgptDirection = mode;
+    if (mode === DIRECTION_RTL || mode === DIRECTION_LTR) {
+      message.dataset.cgptDirection = mode;
     } else {
-      delete node.dataset.cgptDirection;
+      delete message.dataset.cgptDirection;
     }
 
-    const turn = getTurn(node);
-    const toolbar = turn?.querySelector(`.${TOOLBAR_CLASS}`);
+    const toolbar = findToolbar(message);
     if (!toolbar) return;
 
-    for (const button of toolbar.querySelectorAll(".cgpt-direction-button")) {
+    for (const button of toolbar.querySelectorAll(`.${BUTTON_CLASS}`)) {
       const active = button.dataset.mode === mode;
-      button.classList.toggle("cgpt-direction-active", active);
+      button.classList.toggle(ACTIVE_BUTTON_CLASS, active);
       button.setAttribute("aria-pressed", String(active));
     }
   }
 
-  function icon(side) {
+  function alignmentIcon(side) {
+    // SVG path coordinates are icon geometry, not layout/behavior constants.
     return side === "left"
       ? `<svg viewBox="0 0 20 20" aria-hidden="true">
            <path d="M3 4.5h14M3 8h10M3 11.5h14M3 15h8"
@@ -137,101 +140,113 @@
          </svg>`;
   }
 
-  function makeButton(mode, node, messageId) {
+  function createDirectionButton(mode, message, messageId) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "cgpt-direction-button";
+    button.className = BUTTON_CLASS;
     button.dataset.mode = mode;
     button.setAttribute("aria-pressed", "false");
 
-    if (mode === "rtl") {
+    if (mode === DIRECTION_RTL) {
       button.title = "RTL + right align";
       button.setAttribute("aria-label", "Right-to-left + right align");
-      button.innerHTML = icon("right");
+      button.innerHTML = alignmentIcon("right");
     } else {
       button.title = "LTR + left align";
       button.setAttribute("aria-label", "Left-to-right + left align");
-      button.innerHTML = icon("left");
+      button.innerHTML = alignmentIcon("left");
     }
 
-    button.addEventListener("click", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
 
-      const current = node.dataset.cgptDirection;
-      const next = current === mode ? null : mode;
-      setMode(node, next);
+      const currentMode = message.dataset.cgptDirection;
+      const nextMode = currentMode === mode ? null : mode;
+      setMode(message, nextMode);
 
       try {
         const key = storageKey(messageId);
-        if (next) await chrome.storage.local.set({ [key]: next });
-        else await chrome.storage.local.remove(key);
-      } catch (err) {
-        console.debug("Direction extension storage error:", err);
+        if (nextMode) {
+          await chrome.storage.local.set({ [key]: nextMode });
+        } else {
+          await chrome.storage.local.remove(key);
+        }
+      } catch (error) {
+        console.debug("Direction extension storage error:", error);
       }
     });
 
     return button;
   }
 
-  async function inject(node) {
-    if (!(node instanceof HTMLElement)) return;
+  async function injectToolbar(message) {
+    if (!(message instanceof HTMLElement)) return;
 
-    const turn = getTurn(node);
+    const role = site.getRole(message);
+    if (!role) return;
+
+    const turn = site.getTurn(message);
     if (!turn) return;
 
-    const actionBar = findActionBar(turn);
+    // Native action controls are the completion signal for generated replies.
+    // Waiting for them prevents buttons from appearing during "Thinking...".
+    const actionBar = site.findActionBar(turn, role);
     if (!actionBar) return;
 
-    const existing = turn.querySelector(`.${TOOLBAR_CLASS}`);
-    if (existing) {
-      if (existing.parentElement === actionBar) {
-        const current = node.dataset.cgptDirection;
-        if (current === "rtl" || current === "ltr") {
-          applyModeClasses(node, current);
-        }
-        return;
+    const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
+    if (existingToolbar) {
+      const currentMode = message.dataset.cgptDirection;
+      if (currentMode === DIRECTION_RTL || currentMode === DIRECTION_LTR) {
+        applyModeClasses(message, currentMode);
       }
-      existing.remove();
+      return;
     }
 
-    const messageId = getMessageId(node, turn);
+    // React/Angular may replace an action bar after render. Remove only stale
+    // extension toolbars belonging to this same turn before inserting again.
+    turn
+      .querySelectorAll?.(`.${TOOLBAR_CLASS}`)
+      .forEach((toolbar) => toolbar.remove());
+
+    const messageId = getMessageId(message, turn);
     const toolbar = document.createElement("span");
     toolbar.className = TOOLBAR_CLASS;
+    toolbar.dataset.site = site.id;
     toolbar.setAttribute("role", "group");
     toolbar.setAttribute("aria-label", "Message text direction");
 
-    toolbar.appendChild(makeButton("ltr", node, messageId));
-    toolbar.appendChild(makeButton("rtl", node, messageId));
+    toolbar.appendChild(createDirectionButton(DIRECTION_LTR, message, messageId));
+    toolbar.appendChild(createDirectionButton(DIRECTION_RTL, message, messageId));
     actionBar.appendChild(toolbar);
 
     try {
       const key = storageKey(messageId);
       const saved = await chrome.storage.local.get(key);
-      const mode = saved[key];
-      if (mode === "rtl" || mode === "ltr") setMode(node, mode);
-    } catch (err) {
-      console.debug("Direction extension storage error:", err);
+      const savedMode = saved[key];
+      if (savedMode === DIRECTION_RTL || savedMode === DIRECTION_LTR) {
+        setMode(message, savedMode);
+      }
+    } catch (error) {
+      console.debug("Direction extension storage error:", error);
     }
   }
 
-  function process() {
-    document
-      .querySelectorAll(MESSAGE_SELECTOR)
-      .forEach(inject);
+  function scanMessages() {
+    site.getMessages().forEach(injectToolbar);
   }
 
-  function schedule() {
-    clearTimeout(timer);
-    timer = setTimeout(process, 100);
+  function scheduleScan() {
+    clearTimeout(scheduledScan);
+    scheduledScan = setTimeout(scanMessages, MUTATION_DEBOUNCE_MS);
   }
 
-  process();
+  scanMessages();
 
-  new MutationObserver(schedule).observe(document.documentElement, {
+  new MutationObserver(scheduleScan).observe(document.documentElement, {
     childList: true,
     subtree: true
   });
 
-  setInterval(process, 750);
+  setInterval(scanMessages, SAFETY_RESCAN_INTERVAL_MS);
 })();

@@ -1,95 +1,138 @@
-[data-message-author-role="assistant"].cgpt-force-rtl {
+/*
+ * Direction is applied only to elements selected by the active site adapter.
+ * In particular, user-message bubble containers are never direction targets.
+ */
+.cgpt-direction-target.cgpt-force-rtl {
   direction: rtl !important;
   text-align: right !important;
 }
 
-[data-message-author-role="assistant"].cgpt-force-ltr {
+.cgpt-direction-target.cgpt-force-ltr {
   direction: ltr !important;
   text-align: left !important;
 }
 
-[data-message-author-role="assistant"].cgpt-force-rtl :where(
-  p, div.markdown, h1, h2, h3, h4, h5, h6,
+.cgpt-direction-target.cgpt-force-rtl :where(
+  p, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
   direction: rtl !important;
   text-align: right !important;
 }
 
-[data-message-author-role="assistant"].cgpt-force-ltr :where(
-  p, div.markdown, h1, h2, h3, h4, h5, h6,
+.cgpt-direction-target.cgpt-force-ltr :where(
+  p, h1, h2, h3, h4, h5, h6,
   ul, ol, li, blockquote, table, thead, tbody, tfoot, tr, th, td, dl, dt, dd
 ) {
   direction: ltr !important;
   text-align: left !important;
 }
 
-[data-message-author-role="user"] .cgpt-user-direction-target.cgpt-force-rtl {
-  direction: rtl !important;
-  text-align: right !important;
-}
-
-[data-message-author-role="user"] .cgpt-user-direction-target.cgpt-force-ltr {
-  direction: ltr !important;
-  text-align: left !important;
-}
-
-[data-message-author-role="assistant"].cgpt-force-rtl :where(pre, pre *, code, kbd, samp),
-[data-message-author-role="assistant"].cgpt-force-ltr :where(pre, pre *, code, kbd, samp),
-[data-message-author-role="user"] .cgpt-user-direction-target :where(pre, pre *, code, kbd, samp) {
+/* Code should remain LTR even inside an RTL message. */
+.cgpt-direction-target :where(pre, pre *, code, kbd, samp) {
   direction: ltr !important;
   text-align: left !important;
   unicode-bidi: isolate !important;
 }
 
 .cgpt-direction-toolbar {
+  /* Named UI dimensions make spacing/sizing intent explicit and easy to tune. */
+  --cdc-toolbar-button-gap: 2px;
+  --cdc-toolbar-native-control-spacing: 4px;
+  --cdc-button-size: 30px;
+  --cdc-button-padding: 5px;
+  --cdc-button-corner-radius: 7px;
+  --cdc-button-border-width: 1px;
+  --cdc-icon-size: 18px;
+  --cdc-button-idle-opacity: 0.68;
+  --cdc-hover-current-color-weight: 9%;
+  --cdc-active-background-current-color-weight: 11%;
+  --cdc-active-border-current-color-weight: 24%;
+  --cdc-focus-ring-width: 2px;
+  --cdc-focus-ring-offset: 2px;
+
   display: inline-flex !important;
   align-items: center !important;
-  gap: 2px !important;
+  flex: 0 0 auto !important;
+  gap: var(--cdc-toolbar-button-gap) !important;
   direction: ltr !important;
   vertical-align: middle !important;
-  margin-inline-start: 4px !important;
+  margin-inline-start: var(--cdc-toolbar-native-control-spacing) !important;
 }
 
 .cgpt-direction-button {
   appearance: none !important;
   -webkit-appearance: none !important;
   box-sizing: border-box !important;
-  width: 30px !important;
-  height: 30px !important;
-  padding: 5px !important;
+  width: var(--cdc-button-size) !important;
+  height: var(--cdc-button-size) !important;
+  min-width: var(--cdc-button-size) !important;
+  min-height: var(--cdc-button-size) !important;
+  padding: var(--cdc-button-padding) !important;
   margin: 0 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  border: 1px solid transparent !important;
-  border-radius: 7px !important;
+  border: var(--cdc-button-border-width) solid transparent !important;
+  border-radius: var(--cdc-button-corner-radius) !important;
   background: transparent !important;
   color: currentColor !important;
-  opacity: 0.68 !important;
+  opacity: var(--cdc-button-idle-opacity) !important;
   cursor: pointer !important;
   line-height: 1 !important;
+  font: inherit !important;
 }
 
 .cgpt-direction-button svg {
-  width: 18px !important;
-  height: 18px !important;
+  width: var(--cdc-icon-size) !important;
+  height: var(--cdc-icon-size) !important;
   display: block !important;
   pointer-events: none !important;
 }
 
 .cgpt-direction-button:hover {
   opacity: 1 !important;
-  background: color-mix(in srgb, currentColor 9%, transparent) !important;
+  background: color-mix(
+    in srgb,
+    currentColor var(--cdc-hover-current-color-weight),
+    transparent
+  ) !important;
 }
 
 .cgpt-direction-button.cgpt-direction-active {
   opacity: 1 !important;
-  border-color: color-mix(in srgb, currentColor 24%, transparent) !important;
-  background: color-mix(in srgb, currentColor 11%, transparent) !important;
+  border-color: color-mix(
+    in srgb,
+    currentColor var(--cdc-active-border-current-color-weight),
+    transparent
+  ) !important;
+  background: color-mix(
+    in srgb,
+    currentColor var(--cdc-active-background-current-color-weight),
+    transparent
+  ) !important;
 }
 
 .cgpt-direction-button:focus-visible {
-  outline: 2px solid currentColor !important;
-  outline-offset: 2px !important;
+  outline: var(--cdc-focus-ring-width) solid currentColor !important;
+  outline-offset: var(--cdc-focus-ring-offset) !important;
+}
+
+/*
+ * Site adapters may opt a message turn into host-native hover visibility by
+ * setting data-cdc-toolbar-visibility="hover" on that turn. This keeps the
+ * generic toolbar logic site-agnostic while allowing a host such as Gemini to
+ * reveal our controls at the same time as its own copy/edit controls.
+ */
+[data-cdc-toolbar-visibility="hover"] .cgpt-direction-toolbar {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+[data-cdc-toolbar-visibility="hover"]:hover .cgpt-direction-toolbar,
+[data-cdc-toolbar-visibility="hover"]:focus-within .cgpt-direction-toolbar {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
