@@ -44,6 +44,10 @@ Every chatbot adapter has a stable `id` and implements:
 - `findActionBar(turn, role)`
 - `getDirectionTarget(message, role)`
 
+An adapter may also implement `getMessageStorageId(message, turn)` when the host has a
+stable message/turn identity that the generic persistence fallback cannot infer. Claude,
+for example, uses its virtualized conversation row index.
+
 `getDirectionTarget()` must return the text/content element to align, not a user-message
 bubble container. This keeps bubble placement under the host application's control.
 
