@@ -1,4 +1,4 @@
-Chatbot Direction Control — v1.0.2
+Chatbot Direction Control — v1.0.1
 
 Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
@@ -76,4 +76,4 @@ Local test:
 
 ### Chrome Web Store link
 
-https://chromewebstore.google.com/detail/chatgpt-direction-control/jddejfelmjiohnmgcjpmlodhcfjpljej
+https://chromewebstore.google.com/detail/jddejfelmjiohnmgcjpmlodhcfjpljej
