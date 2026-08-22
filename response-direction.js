@@ -61,6 +61,11 @@
   }
 
   function getMessageId(message, turn) {
+    // A host with its own stable turn identity can provide it without leaking
+    // that host's DOM details into this generic controller.
+    const adapterMessageId = site.getMessageStorageId?.(message, turn);
+    if (adapterMessageId) return `site:${adapterMessageId}`;
+
     const idNode =
       message.closest?.("[data-message-id]") ||
       message.querySelector?.("[data-message-id]") ||
