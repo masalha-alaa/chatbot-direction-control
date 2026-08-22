@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Direction Control",
+  "name": "Chatbot Direction Control",
   "version": "1.0.1",
   "description": "Adds per-message LTR/RTL controls and composer direction shortcuts to ChatGPT and Gemini.",
   "permissions": [
