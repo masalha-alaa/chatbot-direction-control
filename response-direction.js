@@ -5,7 +5,7 @@
    * Generic per-message direction controller.
    *
    * This file owns storage, buttons, persistence and DOM observation. It knows
-   * nothing about ChatGPT/Gemini selectors; those live in site-adapters.js.
+   * nothing about chatbot-specific selectors; those live in adapter files.
    */
 
   const extensionApi = globalThis.ChatDirectionControl;
@@ -34,7 +34,38 @@
     return `${location.origin}${location.pathname}`;
   }
 
+  function getTestId(element) {
+    return (
+      element?.getAttribute?.("data-testid") ||
+      element?.getAttribute?.("data-test-id") ||
+      null
+    );
+  }
+
+  function isUniqueTestIdForRole(testId, role) {
+    if (!testId) return false;
+
+    let matches = 0;
+    for (const candidate of site.getMessages()) {
+      if (site.getRole(candidate) !== role) continue;
+
+      const candidateTurn = site.getTurn(candidate);
+      const candidateTestId = getTestId(candidateTurn) || getTestId(candidate);
+      if (candidateTestId !== testId) continue;
+
+      matches += 1;
+      if (matches > 1) return false;
+    }
+
+    return matches === 1;
+  }
+
   function getMessageId(message, turn) {
+    // A host with its own stable turn identity can provide it without leaking
+    // that host's DOM details into this generic controller.
+    const adapterMessageId = site.getMessageStorageId?.(message, turn);
+    if (adapterMessageId) return `site:${adapterMessageId}`;
+
     const idNode =
       message.closest?.("[data-message-id]") ||
       message.querySelector?.("[data-message-id]") ||
@@ -43,17 +74,18 @@
     const messageId = idNode?.getAttribute?.("data-message-id");
     if (messageId) return `message:${messageId}`;
 
-    const testId =
-      turn?.getAttribute?.("data-testid") ||
-      message.getAttribute?.("data-testid") ||
-      message.getAttribute?.("data-test-id");
-    if (testId) return `turn:${testId}`;
+    const role = site.getRole(message) || "message";
+    const testId = getTestId(turn) || getTestId(message);
+
+    // Some hosts reuse one semantic testid for every message (for example,
+    // Claude uses data-testid="user-message"). Such values are not safe
+    // persistence keys, so use a testid only when it is unique for this role.
+    if (isUniqueTestIdForRole(testId, role)) return `turn:${testId}`;
 
     if (message.id) return `id:${message.id}`;
 
     // Last-resort ID for hosts that expose no stable message identifier.
     // It remains deterministic within the current conversation ordering.
-    const role = site.getRole(message) || "message";
     const sameRoleMessages = site
       .getMessages()
       .filter((candidate) => site.getRole(candidate) === role);

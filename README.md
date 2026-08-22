@@ -1,6 +1,6 @@
 Chatbot Direction Control — v1.0.1
 
-Direction controls for ChatGPT and Gemini.
+Direction controls for ChatGPT, Gemini, and Claude.
 
 Features:
 
@@ -9,7 +9,7 @@ Features:
 - Change individual assistant responses between LTR/left and RTL/right using the alignment icons below each response.
 - Change individual user messages the same way without moving the message bubble itself.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
-- Supports ChatGPT and Gemini.
+- Supports ChatGPT, Gemini, and Claude.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
 The extension works entirely on your computer. It does not collect, send, upload, or
@@ -23,11 +23,12 @@ The extension separates generic behavior from chatbot-specific DOM knowledge:
 - `site-adapter-registry.js`: adapter registration, validation, and shared DOM helpers.
 - `adapters/chatgpt.js`: ChatGPT selectors and DOM behavior.
 - `adapters/gemini.js`: Gemini selectors and DOM behavior.
+- `adapters/claude.js`: Claude selectors and DOM behavior.
 - `composer-direction.js`: generic Left/Right Ctrl + Shift handling.
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
 - `styles.css`: shared direction/button styling.
 
-`composer-direction.js` and `response-direction.js` contain no ChatGPT/Gemini host checks.
+`composer-direction.js` and `response-direction.js` contain no chatbot host checks.
 They only call the active adapter through the registry.
 
 Adapter contract
@@ -43,6 +44,10 @@ Every chatbot adapter has a stable `id` and implements:
 - `findActionBar(turn, role)`
 - `getDirectionTarget(message, role)`
 
+An adapter may also implement `getMessageStorageId(message, turn)` when the host has a
+stable message/turn identity that the generic persistence fallback cannot infer. Claude,
+for example, uses its virtualized conversation row index.
+
 `getDirectionTarget()` must return the text/content element to align, not a user-message
 bubble container. This keeps bubble placement under the host application's control.
 
@@ -50,7 +55,7 @@ Adding another chatbot
 ----------------------
 
 1. Add its URL pattern to `manifest.json`.
-2. Add a new file under `adapters/`, for example `adapters/claude.js`.
+2. Add a new file under `adapters/` for the chatbot.
 3. Register one adapter from that file with `ChatDirectionControl.registerAdapter(...)`.
 4. Add the adapter file to the manifest before the two generic controller scripts.
 
@@ -63,7 +68,7 @@ Local test:
 2. Enable Developer mode
 3. Click Load unpacked
 4. Select this folder
-5. Refresh ChatGPT or Gemini
+5. Refresh ChatGPT, Gemini, or Claude
 
 Chrome Web Store:
 

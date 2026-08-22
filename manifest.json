@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Chatbot Direction Control",
   "version": "1.0.1",
-  "description": "Adds per-message LTR/RTL controls and composer direction shortcuts to ChatGPT and Gemini.",
+  "description": "Adds per-message LTR/RTL controls and composer direction shortcuts to ChatGPT, Gemini, and Claude.",
   "permissions": [
     "storage"
   ],
@@ -11,12 +11,14 @@
       "matches": [
         "https://chatgpt.com/*",
         "https://chat.openai.com/*",
-        "https://gemini.google.com/*"
+        "https://gemini.google.com/*",
+        "https://claude.ai/*"
       ],
       "js": [
         "site-adapter-registry.js",
         "adapters/chatgpt.js",
         "adapters/gemini.js",
+        "adapters/claude.js",
         "composer-direction.js",
         "response-direction.js"
       ],
