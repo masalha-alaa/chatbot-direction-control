@@ -136,20 +136,3 @@
   visibility: visible !important;
   pointer-events: auto !important;
 }
-
-/*
- * Some hosts (currently Grok) hide native user actions strictly on pointer
- * hover. Unlike the "hover" policy above, button focus must not keep the
- * toolbar visible after the pointer leaves the turn.
- */
-[data-cdc-toolbar-visibility="hover-only"] .cgpt-direction-toolbar {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-[data-cdc-toolbar-visibility="hover-only"]:hover .cgpt-direction-toolbar {
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}

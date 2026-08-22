@@ -212,16 +212,6 @@
     return button;
   }
 
-  function configureToolbar(message, turn, role, actionBar, toolbar) {
-    site.configureToolbar?.({
-      message,
-      turn,
-      role,
-      actionBar,
-      toolbar
-    });
-  }
-
   async function injectToolbar(message) {
     if (!(message instanceof HTMLElement)) return;
 
@@ -238,8 +228,6 @@
 
     const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
     if (existingToolbar) {
-      configureToolbar(message, turn, role, actionBar, existingToolbar);
-
       const currentMode = message.dataset.cgptDirection;
       if (currentMode === DIRECTION_RTL || currentMode === DIRECTION_LTR) {
         applyModeClasses(message, currentMode);
@@ -263,7 +251,6 @@
     toolbar.appendChild(createDirectionButton(DIRECTION_LTR, message, messageId));
     toolbar.appendChild(createDirectionButton(DIRECTION_RTL, message, messageId));
     actionBar.appendChild(toolbar);
-    configureToolbar(message, turn, role, actionBar, toolbar);
 
     try {
       const key = storageKey(messageId);

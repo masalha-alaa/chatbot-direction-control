@@ -10,9 +10,17 @@
   const { getEditableRoot, firstElement } = api.dom;
 
   const MESSAGE_SELECTOR = ".message-bubble";
+  const USER_MESSAGE_SELECTOR = '[data-testid="user-message"]';
   const ASSISTANT_MESSAGE_SELECTOR = '[data-testid="assistant-message"]';
-  const ASSISTANT_CONTENT_SELECTOR = ".response-content-markdown";
+  const MARKDOWN_CONTENT_SELECTOR = ".response-content-markdown";
   const ACTION_BAR_SELECTOR = ".action-buttons";
+
+  // This is Grok's actual group-hover target around one message and its native
+  // action buttons. The native Edit/Copy buttons use group-hover/group-focus-
+  // within opacity classes relative to this element.
+  const TURN_HOVER_TARGET_SELECTOR = '[data-scroll-anchor-root="true"].group';
+  const TOOLBAR_VISIBILITY_ATTRIBUTE = "data-cdc-toolbar-visibility";
+  const TOOLBAR_VISIBILITY_HOVER = "hover";
 
   // Bound DOM traversal so fallbacks cannot escape one message turn and attach
   // controls to the composer or to another turn if Grok changes its wrappers.
@@ -20,7 +28,6 @@
   const MAX_ACTION_BAR_ANCESTORS = 4;
   const MAX_COMPOSER_ANCESTORS = 5;
   const MIN_ACTION_BUTTONS = 2;
-  const HIDDEN_OPACITY_THRESHOLD = 0.01;
 
   const SEND_BUTTON_SELECTOR = [
     'button[data-testid="chat-submit"]',
@@ -40,20 +47,6 @@
     '[data-testid*="retry" i]'
   ]);
 
-  const USER_ACTION_BUTTON_SELECTORS = Object.freeze([
-    'button[aria-label*="Edit" i]',
-    '[data-testid*="edit" i]',
-    'button[aria-label*="Copy" i]',
-    '[data-testid*="copy" i]'
-  ]);
-
-  // Grok's native user actions are controlled by its own hover CSS and may be
-  // hidden on a wrapper rather than on the button itself. Mirror their actual
-  // computed visibility instead of guessing which generated hover container
-  // Grok currently uses.
-  const toolbarVisibilityBindings = new Map();
-  let visibilitySyncFrame = null;
-
   function sortByDocumentOrder(elements) {
     return elements.sort((left, right) => {
       if (left === right) return 0;
@@ -66,9 +59,7 @@
     if (!(element instanceof Element)) return false;
 
     return Boolean(
-      element.closest(
-        `pre, code, ${ASSISTANT_CONTENT_SELECTOR}`
-      )
+      element.closest(`pre, code, ${MARKDOWN_CONTENT_SELECTOR}`)
     );
   }
 
@@ -76,20 +67,6 @@
     if (!(root instanceof Element)) return null;
 
     for (const selector of TURN_ACTION_BUTTON_SELECTORS) {
-      for (const candidate of root.querySelectorAll(selector)) {
-        if (candidate instanceof HTMLElement && !isInsideMessageContent(candidate)) {
-          return candidate;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function firstUserActionButton(root) {
-    if (!(root instanceof Element)) return null;
-
-    for (const selector of USER_ACTION_BUTTON_SELECTORS) {
       for (const candidate of root.querySelectorAll(selector)) {
         if (candidate instanceof HTMLElement && !isInsideMessageContent(candidate)) {
           return candidate;
@@ -173,80 +150,20 @@
     return null;
   }
 
-  function isEffectivelyVisible(element) {
-    if (!(element instanceof HTMLElement) || !element.isConnected) return false;
-
-    const bounds = element.getBoundingClientRect();
-    if (bounds.width === 0 || bounds.height === 0) return false;
-
-    let candidate = element;
-    while (candidate instanceof HTMLElement) {
-      const style = getComputedStyle(candidate);
-      const opacity = Number.parseFloat(style.opacity);
-
-      if (
-        style.display === "none" ||
-        style.visibility === "hidden" ||
-        style.visibility === "collapse" ||
-        (!Number.isNaN(opacity) && opacity <= HIDDEN_OPACITY_THRESHOLD)
-      ) {
-        return false;
-      }
-
-      if (candidate === document.body) break;
-      candidate = candidate.parentElement;
+  function useNativeUserActionVisibility(turn, actionBar) {
+    if (!(turn instanceof HTMLElement) || !(actionBar instanceof HTMLElement)) {
+      return actionBar;
     }
 
-    return true;
-  }
-
-  function setToolbarVisible(toolbar, visible) {
-    toolbar.style.setProperty("opacity", visible ? "1" : "0", "important");
-    toolbar.style.setProperty(
-      "visibility",
-      visible ? "visible" : "hidden",
-      "important"
+    // The shared "hover" policy mirrors Grok's native group-hover and
+    // group-focus-within behavior on this exact message wrapper.
+    turn.setAttribute(
+      TOOLBAR_VISIBILITY_ATTRIBUTE,
+      TOOLBAR_VISIBILITY_HOVER
     );
-    toolbar.style.setProperty(
-      "pointer-events",
-      visible ? "auto" : "none",
-      "important"
-    );
+
+    return actionBar;
   }
-
-  function syncToolbarVisibility() {
-    visibilitySyncFrame = null;
-
-    for (const [toolbar, binding] of toolbarVisibilityBindings) {
-      if (!toolbar.isConnected) {
-        toolbarVisibilityBindings.delete(toolbar);
-        continue;
-      }
-
-      const nativeAction =
-        firstUserActionButton(binding.actionBar) ||
-        firstUserActionButton(binding.turn);
-
-      setToolbarVisible(toolbar, isEffectivelyVisible(nativeAction));
-    }
-  }
-
-  function scheduleToolbarVisibilitySync() {
-    if (visibilitySyncFrame != null) return;
-    visibilitySyncFrame = requestAnimationFrame(syncToolbarVisibility);
-  }
-
-  // Pointer hover changes and native opacity transitions do not mutate the DOM,
-  // so MutationObserver alone cannot detect them. One shared set of listeners
-  // updates all Grok user toolbars without adding listeners per message.
-  document.addEventListener("pointerover", scheduleToolbarVisibilitySync, true);
-  document.addEventListener("pointerout", scheduleToolbarVisibilitySync, true);
-  document.addEventListener("transitionend", scheduleToolbarVisibilitySync, true);
-  window.addEventListener("blur", () => {
-    for (const toolbar of toolbarVisibilityBindings.keys()) {
-      setToolbarVisible(toolbar, false);
-    }
-  });
 
   api.registerAdapter({
     id: "grok",
@@ -292,69 +209,66 @@
         return null;
       }
 
+      // Both user and assistant bubbles can contain response-content-markdown,
+      // so explicit message testids must win over markdown-content fallbacks.
+      if (
+        message.matches(USER_MESSAGE_SELECTOR) ||
+        message.querySelector(USER_MESSAGE_SELECTOR)
+      ) {
+        return ROLE_USER;
+      }
+
       if (
         message.matches(ASSISTANT_MESSAGE_SELECTOR) ||
-        message.querySelector(ASSISTANT_MESSAGE_SELECTOR) ||
-        message.matches(ASSISTANT_CONTENT_SELECTOR) ||
-        message.querySelector(ASSISTANT_CONTENT_SELECTOR)
+        message.querySelector(ASSISTANT_MESSAGE_SELECTOR)
       ) {
         return ROLE_ASSISTANT;
       }
 
-      // Grok exposes all conversation entries as message-bubble elements. Once
-      // assistant markers are excluded, the remaining conversation bubble is
-      // the user's message. This also avoids depending on generated Tailwind
-      // color classes for role detection.
-      return ROLE_USER;
+      return message.matches(MARKDOWN_CONTENT_SELECTOR) ||
+        message.querySelector(MARKDOWN_CONTENT_SELECTOR)
+        ? ROLE_ASSISTANT
+        : ROLE_USER;
     },
 
     getTurn(message) {
-      return findTurnAroundMessage(message);
+      // Use Grok's measured group-hover wrapper first. This is the element that
+      // drives native Edit/Copy opacity in the live DOM supplied by the user.
+      return (
+        message.closest(TURN_HOVER_TARGET_SELECTOR) ||
+        findTurnAroundMessage(message)
+      );
     },
 
-    findActionBar(turn) {
+    findActionBar(turn, role) {
       if (!(turn instanceof HTMLElement)) return null;
 
       const namedBar = turn.querySelector(ACTION_BAR_SELECTOR);
-      if (namedBar instanceof HTMLElement) return namedBar;
+      const actionBar = namedBar instanceof HTMLElement
+        ? namedBar
+        : actionBarFromButton(firstTurnActionButton(turn));
+      if (!actionBar) return null;
 
-      return actionBarFromButton(firstTurnActionButton(turn));
-    },
-
-    configureToolbar({ role, turn, actionBar, toolbar }) {
-      if (
-        role !== ROLE_USER ||
-        !(turn instanceof HTMLElement) ||
-        !(actionBar instanceof HTMLElement) ||
-        !(toolbar instanceof HTMLElement)
-      ) {
-        return;
-      }
-
-      const isNewBinding = !toolbarVisibilityBindings.has(toolbar);
-      toolbarVisibilityBindings.set(toolbar, { turn, actionBar });
-
-      // Hide a newly injected user toolbar immediately. The scheduled sync will
-      // reveal it only when Grok's own Edit/Copy control is actually visible.
-      if (isNewBinding) setToolbarVisible(toolbar, false);
-      scheduleToolbarVisibilitySync();
+      return role === ROLE_USER
+        ? useNativeUserActionVisibility(turn, actionBar)
+        : actionBar;
     },
 
     getDirectionTarget(message, role) {
       if (role === ROLE_ASSISTANT) {
         return firstElement(message, [
-          ASSISTANT_CONTENT_SELECTOR,
+          MARKDOWN_CONTENT_SELECTOR,
           ".prose",
           '[class*="markdown"]'
         ]) || message;
       }
 
-      // The message-bubble itself is the text bubble; its parent controls the
-      // left/right placement. Applying text direction here does not move it.
+      // The user bubble's parent controls its placement. Only the text content
+      // is selected here so changing direction never moves the bubble itself.
       return firstElement(message, [
         ".whitespace-pre-wrap",
         ".prose",
-        '[data-testid="user-message"]'
+        MARKDOWN_CONTENT_SELECTOR
       ]) || message;
     }
   });
