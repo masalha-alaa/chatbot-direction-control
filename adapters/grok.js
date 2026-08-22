@@ -20,12 +20,7 @@
   const MAX_ACTION_BAR_ANCESTORS = 4;
   const MAX_COMPOSER_ANCESTORS = 5;
   const MIN_ACTION_BUTTONS = 2;
-
-  // Grok hides native user-message actions strictly on mouse hover. Use the
-  // shared hover-only policy so our buttons also disappear when the pointer
-  // leaves, even if one of our buttons still owns keyboard focus after a click.
-  const TOOLBAR_VISIBILITY_ATTRIBUTE = "data-cdc-toolbar-visibility";
-  const TOOLBAR_VISIBILITY_HOVER_ONLY = "hover-only";
+  const HIDDEN_OPACITY_THRESHOLD = 0.01;
 
   const SEND_BUTTON_SELECTOR = [
     'button[data-testid="chat-submit"]',
@@ -44,6 +39,20 @@
     '[data-testid*="edit" i]',
     '[data-testid*="retry" i]'
   ]);
+
+  const USER_ACTION_BUTTON_SELECTORS = Object.freeze([
+    'button[aria-label*="Edit" i]',
+    '[data-testid*="edit" i]',
+    'button[aria-label*="Copy" i]',
+    '[data-testid*="copy" i]'
+  ]);
+
+  // Grok's native user actions are controlled by its own hover CSS and may be
+  // hidden on a wrapper rather than on the button itself. Mirror their actual
+  // computed visibility instead of guessing which generated hover container
+  // Grok currently uses.
+  const toolbarVisibilityBindings = new Map();
+  let visibilitySyncFrame = null;
 
   function sortByDocumentOrder(elements) {
     return elements.sort((left, right) => {
@@ -67,6 +76,20 @@
     if (!(root instanceof Element)) return null;
 
     for (const selector of TURN_ACTION_BUTTON_SELECTORS) {
+      for (const candidate of root.querySelectorAll(selector)) {
+        if (candidate instanceof HTMLElement && !isInsideMessageContent(candidate)) {
+          return candidate;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function firstUserActionButton(root) {
+    if (!(root instanceof Element)) return null;
+
+    for (const selector of USER_ACTION_BUTTON_SELECTORS) {
       for (const candidate of root.querySelectorAll(selector)) {
         if (candidate instanceof HTMLElement && !isInsideMessageContent(candidate)) {
           return candidate;
@@ -135,19 +158,6 @@
     return fallback;
   }
 
-  function useNativeUserActionVisibility(turn, actionBar) {
-    if (!(turn instanceof HTMLElement) || !(actionBar instanceof HTMLElement)) {
-      return actionBar;
-    }
-
-    turn.setAttribute(
-      TOOLBAR_VISIBILITY_ATTRIBUTE,
-      TOOLBAR_VISIBILITY_HOVER_ONLY
-    );
-
-    return actionBar;
-  }
-
   function ancestorWithSendButton(editor) {
     let candidate = editor.parentElement;
 
@@ -162,6 +172,81 @@
 
     return null;
   }
+
+  function isEffectivelyVisible(element) {
+    if (!(element instanceof HTMLElement) || !element.isConnected) return false;
+
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return false;
+
+    let candidate = element;
+    while (candidate instanceof HTMLElement) {
+      const style = getComputedStyle(candidate);
+      const opacity = Number.parseFloat(style.opacity);
+
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse" ||
+        (!Number.isNaN(opacity) && opacity <= HIDDEN_OPACITY_THRESHOLD)
+      ) {
+        return false;
+      }
+
+      if (candidate === document.body) break;
+      candidate = candidate.parentElement;
+    }
+
+    return true;
+  }
+
+  function setToolbarVisible(toolbar, visible) {
+    toolbar.style.setProperty("opacity", visible ? "1" : "0", "important");
+    toolbar.style.setProperty(
+      "visibility",
+      visible ? "visible" : "hidden",
+      "important"
+    );
+    toolbar.style.setProperty(
+      "pointer-events",
+      visible ? "auto" : "none",
+      "important"
+    );
+  }
+
+  function syncToolbarVisibility() {
+    visibilitySyncFrame = null;
+
+    for (const [toolbar, binding] of toolbarVisibilityBindings) {
+      if (!toolbar.isConnected) {
+        toolbarVisibilityBindings.delete(toolbar);
+        continue;
+      }
+
+      const nativeAction =
+        firstUserActionButton(binding.actionBar) ||
+        firstUserActionButton(binding.turn);
+
+      setToolbarVisible(toolbar, isEffectivelyVisible(nativeAction));
+    }
+  }
+
+  function scheduleToolbarVisibilitySync() {
+    if (visibilitySyncFrame != null) return;
+    visibilitySyncFrame = requestAnimationFrame(syncToolbarVisibility);
+  }
+
+  // Pointer hover changes and native opacity transitions do not mutate the DOM,
+  // so MutationObserver alone cannot detect them. One shared set of listeners
+  // updates all Grok user toolbars without adding listeners per message.
+  document.addEventListener("pointerover", scheduleToolbarVisibilitySync, true);
+  document.addEventListener("pointerout", scheduleToolbarVisibilitySync, true);
+  document.addEventListener("transitionend", scheduleToolbarVisibilitySync, true);
+  window.addEventListener("blur", () => {
+    for (const toolbar of toolbarVisibilityBindings.keys()) {
+      setToolbarVisible(toolbar, false);
+    }
+  });
 
   api.registerAdapter({
     id: "grok",
@@ -227,22 +312,32 @@
       return findTurnAroundMessage(message);
     },
 
-    findActionBar(turn, role) {
+    findActionBar(turn) {
       if (!(turn instanceof HTMLElement)) return null;
 
       const namedBar = turn.querySelector(ACTION_BAR_SELECTOR);
-      if (namedBar instanceof HTMLElement) {
-        return role === ROLE_USER
-          ? useNativeUserActionVisibility(turn, namedBar)
-          : namedBar;
+      if (namedBar instanceof HTMLElement) return namedBar;
+
+      return actionBarFromButton(firstTurnActionButton(turn));
+    },
+
+    configureToolbar({ role, turn, actionBar, toolbar }) {
+      if (
+        role !== ROLE_USER ||
+        !(turn instanceof HTMLElement) ||
+        !(actionBar instanceof HTMLElement) ||
+        !(toolbar instanceof HTMLElement)
+      ) {
+        return;
       }
 
-      const actionBar = actionBarFromButton(firstTurnActionButton(turn));
-      if (!actionBar) return null;
+      const isNewBinding = !toolbarVisibilityBindings.has(toolbar);
+      toolbarVisibilityBindings.set(toolbar, { turn, actionBar });
 
-      return role === ROLE_USER
-        ? useNativeUserActionVisibility(turn, actionBar)
-        : actionBar;
+      // Hide a newly injected user toolbar immediately. The scheduled sync will
+      // reveal it only when Grok's own Edit/Copy control is actually visible.
+      if (isNewBinding) setToolbarVisible(toolbar, false);
+      scheduleToolbarVisibilitySync();
     },
 
     getDirectionTarget(message, role) {
