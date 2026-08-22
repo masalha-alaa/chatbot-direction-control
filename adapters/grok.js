@@ -21,6 +21,11 @@
   const MAX_COMPOSER_ANCESTORS = 5;
   const MIN_ACTION_BUTTONS = 2;
 
+  // Grok hides native user-message actions until the turn is hovered. Marking
+  // the turn with this shared policy makes our toolbar follow the same behavior.
+  const TOOLBAR_VISIBILITY_ATTRIBUTE = "data-cdc-toolbar-visibility";
+  const TOOLBAR_VISIBILITY_HOVER = "hover";
+
   const SEND_BUTTON_SELECTOR = [
     'button[data-testid="chat-submit"]',
     'button[aria-label="Submit"]',
@@ -129,6 +134,19 @@
     return fallback;
   }
 
+  function useNativeUserActionVisibility(turn, actionBar) {
+    if (!(turn instanceof HTMLElement) || !(actionBar instanceof HTMLElement)) {
+      return actionBar;
+    }
+
+    turn.setAttribute(
+      TOOLBAR_VISIBILITY_ATTRIBUTE,
+      TOOLBAR_VISIBILITY_HOVER
+    );
+
+    return actionBar;
+  }
+
   function ancestorWithSendButton(editor) {
     let candidate = editor.parentElement;
 
@@ -208,13 +226,22 @@
       return findTurnAroundMessage(message);
     },
 
-    findActionBar(turn) {
+    findActionBar(turn, role) {
       if (!(turn instanceof HTMLElement)) return null;
 
       const namedBar = turn.querySelector(ACTION_BAR_SELECTOR);
-      if (namedBar instanceof HTMLElement) return namedBar;
+      if (namedBar instanceof HTMLElement) {
+        return role === ROLE_USER
+          ? useNativeUserActionVisibility(turn, namedBar)
+          : namedBar;
+      }
 
-      return actionBarFromButton(firstTurnActionButton(turn));
+      const actionBar = actionBarFromButton(firstTurnActionButton(turn));
+      if (!actionBar) return null;
+
+      return role === ROLE_USER
+        ? useNativeUserActionVisibility(turn, actionBar)
+        : actionBar;
     },
 
     getDirectionTarget(message, role) {
