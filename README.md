@@ -1,13 +1,14 @@
-Chatbot Direction Control — v1.0.1
+Chatbot Direction Control — v1.0.2
 
 Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
 Features:
 
-- Use Left Ctrl + Shift to set the active message composer to LTR + left aligned.
-- Use Right Ctrl + Shift to set the active message composer to RTL + right aligned.
-- Change individual assistant responses between LTR/left and RTL/right using the alignment icons below each response.
-- Change individual user messages the same way without moving the message bubble itself.
+- Use `Left Ctrl + Shift` to left-align the active message box.
+- Use `Right Ctrl + Shift` to right-align the active message box.
+
+- Change individual messages between LTR and RTL using the alignment icons below each message.
+
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
 
@@ -25,7 +26,7 @@ The extension separates generic behavior from chatbot-specific DOM knowledge:
 - `adapters/gemini.js`: Gemini selectors and DOM behavior.
 - `adapters/claude.js`: Claude selectors and DOM behavior.
 - `adapters/grok.js`: Grok selectors and DOM behavior.
-- `composer-direction.js`: generic Left/Right Ctrl + Shift handling.
+- `composer-direction.js`: generic `Left/Right Ctrl + Shift` handling.
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
 - `styles.css`: shared direction/button styling.
 
@@ -65,16 +66,14 @@ No host-specific condition should be added to `composer-direction.js` or
 
 Local test:
 
-1. Open chrome://extensions
+1. Open `chrome://extensions`
 2. Enable Developer mode
 3. Click Load unpacked
 4. Select this folder
 5. Refresh ChatGPT, Gemini, Claude, or Grok
 
-Chrome Web Store:
 
-- Upload the ZIP whose manifest.json is at the ZIP root.
 
-Chrome Web Store link:
+### Chrome Web Store link
 
 https://chromewebstore.google.com/detail/chatgpt-direction-control/jddejfelmjiohnmgcjpmlodhcfjpljej
