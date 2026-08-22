@@ -21,10 +21,11 @@
   const MAX_COMPOSER_ANCESTORS = 5;
   const MIN_ACTION_BUTTONS = 2;
 
-  // Grok hides native user-message actions until the turn is hovered. Marking
-  // the turn with this shared policy makes our toolbar follow the same behavior.
+  // Grok hides native user-message actions strictly on mouse hover. Use the
+  // shared hover-only policy so our buttons also disappear when the pointer
+  // leaves, even if one of our buttons still owns keyboard focus after a click.
   const TOOLBAR_VISIBILITY_ATTRIBUTE = "data-cdc-toolbar-visibility";
-  const TOOLBAR_VISIBILITY_HOVER = "hover";
+  const TOOLBAR_VISIBILITY_HOVER_ONLY = "hover-only";
 
   const SEND_BUTTON_SELECTOR = [
     'button[data-testid="chat-submit"]',
@@ -141,7 +142,7 @@
 
     turn.setAttribute(
       TOOLBAR_VISIBILITY_ATTRIBUTE,
-      TOOLBAR_VISIBILITY_HOVER
+      TOOLBAR_VISIBILITY_HOVER_ONLY
     );
 
     return actionBar;
