@@ -1,6 +1,6 @@
 Chatbot Direction Control — v1.0.1
 
-Direction controls for ChatGPT, Gemini, and Claude.
+Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
 Features:
 
@@ -9,7 +9,7 @@ Features:
 - Change individual assistant responses between LTR/left and RTL/right using the alignment icons below each response.
 - Change individual user messages the same way without moving the message bubble itself.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
-- Supports ChatGPT, Gemini, and Claude.
+- Supports ChatGPT, Gemini, Claude, and Grok.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
 The extension works entirely on your computer. It does not collect, send, upload, or
@@ -24,6 +24,7 @@ The extension separates generic behavior from chatbot-specific DOM knowledge:
 - `adapters/chatgpt.js`: ChatGPT selectors and DOM behavior.
 - `adapters/gemini.js`: Gemini selectors and DOM behavior.
 - `adapters/claude.js`: Claude selectors and DOM behavior.
+- `adapters/grok.js`: Grok selectors and DOM behavior.
 - `composer-direction.js`: generic Left/Right Ctrl + Shift handling.
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
 - `styles.css`: shared direction/button styling.
@@ -68,7 +69,7 @@ Local test:
 2. Enable Developer mode
 3. Click Load unpacked
 4. Select this folder
-5. Refresh ChatGPT, Gemini, or Claude
+5. Refresh ChatGPT, Gemini, Claude, or Grok
 
 Chrome Web Store:
 
