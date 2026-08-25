@@ -1,5 +1,2 @@
 artifacts/
 feature-branches/
-assets/*
-!assets/icon.png
-!assets/icon-128x128.png
