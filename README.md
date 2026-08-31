@@ -1,15 +1,17 @@
-Chatbot Direction Control — v1.0.1
+Chatbot Direction Control — v1.0.2
 
 Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
 Features:
 
 - Use `Left Ctrl + Shift` to left-align the active message box.
+
 - Use `Right Ctrl + Shift` to right-align the active message box.
 
 - Change individual messages between LTR and RTL using the alignment icons below each message.
 
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
+
 - Supports ChatGPT, Gemini, Claude, and Grok.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
@@ -71,8 +73,6 @@ Local test:
 3. Click Load unpacked
 4. Select this folder
 5. Refresh ChatGPT, Gemini, Claude, or Grok
-
-
 
 ### Chrome Web Store link
 
