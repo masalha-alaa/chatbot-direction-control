@@ -35,6 +35,14 @@
       return composer ? editor : null;
     },
 
+    getComposerTextBlocks(editor) {
+      // Measured live DOM: ChatGPT's ProseMirror composer represents each
+      // Enter-created logical line as a direct <p> child of the editable root.
+      return [...editor.children].filter(
+        (child) => child instanceof HTMLElement && child.tagName === "P"
+      );
+    },
+
     getMessages() {
       return [...document.querySelectorAll(
         '[data-message-author-role="assistant"], [data-message-author-role="user"]'

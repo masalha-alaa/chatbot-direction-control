@@ -139,6 +139,12 @@
         : null;
     },
 
+    getComposerTextBlocks(editor) {
+      return [...editor.children].filter(
+        (child) => child instanceof HTMLElement && child.tagName === "P"
+      );
+    },
+
     getMessages() {
       const userMessages = firstAvailableSelector([
         USER_MESSAGE_SELECTOR,

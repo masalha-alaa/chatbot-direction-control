@@ -196,6 +196,12 @@
         : null;
     },
 
+    getComposerTextBlocks(editor) {
+      return [...editor.children].filter(
+        (child) => child instanceof HTMLElement && child.tagName === "P"
+      );
+    },
+
     getMessages() {
       return sortByDocumentOrder(
         [...document.querySelectorAll(MESSAGE_SELECTOR)].filter(
