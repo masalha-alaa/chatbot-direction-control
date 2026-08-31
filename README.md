@@ -4,9 +4,10 @@ Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
 Features:
 
-- Use `Left Ctrl + Shift` to set the current composer paragraph to LTR/left-aligned.
-- Use `Right Ctrl + Shift` to set the current composer paragraph to RTL/right-aligned.
+- Use `Left Ctrl + Left Shift` to set the current composer paragraph to LTR/left-aligned.
+- Use `Right Ctrl + Right Shift` to set the current composer paragraph to RTL/right-aligned.
 - If a selection spans multiple paragraphs, the shortcut applies to every selected paragraph.
+- Soft-wrapped text remains part of the same paragraph; only Enter-created paragraphs are controlled independently.
 - Change individual chatbot messages between LTR and RTL using the alignment icons below each message.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
