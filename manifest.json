@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chatbot Direction Control",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Adds per-message LTR/RTL controls and composer direction shortcuts to ChatGPT, Gemini, Claude, and Grok.",
   "icons": {
     "16": "assets/icon-16x16.png",
