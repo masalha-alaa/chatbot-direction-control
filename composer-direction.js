@@ -132,25 +132,23 @@
     "keydown",
     (event) => {
       if (!directionKeys.has(event.code)) {
-        if (pendingShortcut && !event.repeat) {
+        // Any other key used while Ctrl/Shift is already held means this is a
+        // larger keyboard shortcut, not a direction-change gesture.
+        if (pressedKeys.size > 0 && !event.repeat) {
           shortcutCancelled = true;
         }
         return;
       }
 
-      const wasAlreadyPressed = pressedKeys.has(event.code);
       pressedKeys.add(event.code);
-
-      if (
-        pendingShortcut &&
-        !wasAlreadyPressed &&
-        !pendingShortcut.chord.includes(event.code)
-      ) {
-        shortcutCancelled = true;
-      }
 
       const shortcut = getPressedDirectionShortcut();
       if (!shortcut) return;
+
+      // A third Ctrl/Shift key also turns this into a different gesture.
+      if ([...pressedKeys].some((keyCode) => !shortcut.chord.includes(keyCode))) {
+        shortcutCancelled = true;
+      }
 
       const editor = site.findComposerEditor(document.activeElement);
       if (!isSupportedComposer(editor)) return;
