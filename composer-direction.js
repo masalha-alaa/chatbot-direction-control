@@ -17,10 +17,16 @@
   const directionKeys = new Set([...LEFT_CHORD, ...RIGHT_CHORD]);
   const pressedKeys = new Set();
   const paragraphDirections = new Map();
+  let pendingShortcut = null;
+  let shortcutCancelled = false;
   let nextComposerInstanceId = 1;
 
   function chordIsPressed(chord) {
     return chord.every((keyCode) => pressedKeys.has(keyCode));
+  }
+
+  function noDirectionKeysPressed() {
+    return [...directionKeys].every((keyCode) => !pressedKeys.has(keyCode));
   }
 
   function getSelectedParagraphs(editor, paragraphs) {
@@ -105,36 +111,63 @@
     editor.focus({ preventScroll: true });
   }
 
+  function getPressedDirectionShortcut() {
+    if (chordIsPressed(RIGHT_CHORD)) {
+      return { chord: RIGHT_CHORD, direction: DIRECTION_RTL };
+    }
+    if (chordIsPressed(LEFT_CHORD)) {
+      return { chord: LEFT_CHORD, direction: DIRECTION_LTR };
+    }
+    return null;
+  }
+
+  function isSupportedComposer(editor) {
+    return (
+      editor?.isContentEditable &&
+      typeof site.getComposerTextBlocks === "function"
+    );
+  }
+
   document.addEventListener(
     "keydown",
     (event) => {
-      if (!directionKeys.has(event.code)) return;
-
-      pressedKeys.add(event.code);
-
-      const editor = site.findComposerEditor(document.activeElement);
-      if (!editor) return;
-
-      let direction = null;
-      if (chordIsPressed(RIGHT_CHORD)) {
-        direction = DIRECTION_RTL;
-      } else if (chordIsPressed(LEFT_CHORD)) {
-        direction = DIRECTION_LTR;
-      }
-      if (!direction) return;
-
-      // Paragraph direction handling is opt-in per site adapter. Sites without
-      // an explicit implementation keep their browser/page-native behavior.
-      if (
-        !editor.isContentEditable ||
-        typeof site.getComposerTextBlocks !== "function"
-      ) {
+      if (!directionKeys.has(event.code)) {
+        if (pendingShortcut && !event.repeat) {
+          shortcutCancelled = true;
+        }
         return;
       }
 
+      const wasAlreadyPressed = pressedKeys.has(event.code);
+      pressedKeys.add(event.code);
+
+      if (
+        pendingShortcut &&
+        !wasAlreadyPressed &&
+        !pendingShortcut.chord.includes(event.code)
+      ) {
+        shortcutCancelled = true;
+      }
+
+      const shortcut = getPressedDirectionShortcut();
+      if (!shortcut) return;
+
+      const editor = site.findComposerEditor(document.activeElement);
+      if (!isSupportedComposer(editor)) return;
+
+      // Suppress the browser/site's native Ctrl+Shift direction behavior as
+      // soon as the direction chord is complete. The extension applies its
+      // direction only when one of the chord keys is released.
       event.preventDefault();
       event.stopPropagation();
-      setParagraphDirection(editor, direction);
+
+      if (!pendingShortcut && !shortcutCancelled) {
+        pendingShortcut = {
+          chord: shortcut.chord,
+          direction: shortcut.direction,
+          editor,
+        };
+      }
     },
     true
   );
@@ -142,10 +175,44 @@
   document.addEventListener(
     "keyup",
     (event) => {
+      const isDirectionKey = directionKeys.has(event.code);
+      const shouldApply =
+        isDirectionKey &&
+        pendingShortcut &&
+        pendingShortcut.chord.includes(event.code) &&
+        !shortcutCancelled;
+
+      const shortcutToApply = shouldApply ? pendingShortcut : null;
+
+      if (
+        isDirectionKey &&
+        pendingShortcut &&
+        pendingShortcut.chord.includes(event.code)
+      ) {
+        pendingShortcut = null;
+      }
+
       pressedKeys.delete(event.code);
+
+      if (shortcutToApply) {
+        event.preventDefault();
+        event.stopPropagation();
+        setParagraphDirection(shortcutToApply.editor, shortcutToApply.direction);
+      }
+
+      // Once all Ctrl/Shift keys involved in direction shortcuts are released,
+      // a previously cancelled shortcut can start fresh on the next chord.
+      if (noDirectionKeysPressed()) {
+        pendingShortcut = null;
+        shortcutCancelled = false;
+      }
     },
     true
   );
 
-  window.addEventListener("blur", () => pressedKeys.clear());
+  window.addEventListener("blur", () => {
+    pressedKeys.clear();
+    pendingShortcut = null;
+    shortcutCancelled = false;
+  });
 })();
