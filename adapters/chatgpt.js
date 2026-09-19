@@ -48,10 +48,7 @@
     id: "chatgpt",
 
     matches(pageLocation) {
-      return (
-        pageLocation.hostname === "chatgpt.com" ||
-        pageLocation.hostname === "chat.openai.com"
-      );
+      return pageLocation.hostname === "chatgpt.com";
     },
 
     findComposerEditor(activeElement) {
