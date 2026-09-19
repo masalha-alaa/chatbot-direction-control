@@ -9,8 +9,6 @@
   const { ROLE_USER, ROLE_ASSISTANT } = api;
   const { getEditableRoot, firstElement } = api.dom;
 
-  const TURN_SELECTOR =
-    '[data-turn="assistant"], [data-turn="user"]';
   const LEGACY_MESSAGE_SELECTOR =
     '[data-message-author-role="assistant"], [data-message-author-role="user"]';
   const ACTION_BAR_SELECTOR = ".turn-action-controls";
@@ -78,18 +76,15 @@
     },
 
     getMessages() {
-      // ChatGPT currently exposes neither data-turn nor
-      // data-message-author-role. Its native per-message action bars remain
+      // Current ChatGPT no longer exposes data-message-author-role.
+      // Its native per-message action bars remain
       // identifiable by their copy buttons, so use those bars as message
       // anchors. This also keeps user and assistant messages separate even
       // though ChatGPT now wraps both inside one conversation-turn container.
       const actionBars = getCurrentActionBars();
       if (actionBars.length > 0) return actionBars;
 
-      // Retain the two previous ChatGPT structures as compatibility fallbacks.
-      const turns = [...document.querySelectorAll(TURN_SELECTOR)];
-      if (turns.length > 0) return turns;
-
+      // Preserve the original legacy message discovery.
       return [...document.querySelectorAll(LEGACY_MESSAGE_SELECTOR)];
     },
 
@@ -101,17 +96,13 @@
         }
       }
 
-      const role =
-        message.getAttribute?.("data-turn") ||
-        message.getAttribute?.("data-message-author-role");
+      const role = message.getAttribute?.("data-message-author-role");
       return role === ROLE_USER || role === ROLE_ASSISTANT ? role : null;
     },
 
     getTurn(message) {
       return (
         (message.matches?.(ACTION_BAR_SELECTOR) ? message : null) ||
-        (message.matches?.(TURN_SELECTOR) ? message : null) ||
-        message.closest(TURN_SELECTOR) ||
         message.closest("article") ||
         message.closest('[data-testid^="conversation-turn-"]') ||
         message.parentElement
@@ -166,21 +157,16 @@
       if (role === ROLE_USER) {
         // Align only text inside the user bubble; never move the bubble itself.
         return firstElement(message, [
-          '[data-testid="collapsible-user-message-root"]',
           ".whitespace-pre-wrap",
           '[class*="whitespace-pre-wrap"]',
-          ".markdown",
-          '[data-message-author-role="user"]',
-          '[data-turn-start-message="true"]'
-        ]) || message;
+          ".markdown"
+        ]);
       }
 
       // Isolate assistant text from the native action controls where possible.
       return firstElement(message, [
         ".markdown",
-        '[class*="markdown"]',
-        '[data-message-author-role="assistant"]',
-        '[data-turn-start-message="true"]'
+        '[class*="markdown"]'
       ]) || message;
     }
   });
