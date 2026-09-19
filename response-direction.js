@@ -97,13 +97,21 @@
   }
 
   function clearDirectionClasses(message) {
-    message.classList.remove(
-      DIRECTION_TARGET_CLASS,
-      RTL_CLASS,
-      LTR_CLASS
-    );
+    const targets = new Set([
+      message,
+      ...message.querySelectorAll(`.${DIRECTION_TARGET_CLASS}`)
+    ]);
 
-    for (const target of message.querySelectorAll(`.${DIRECTION_TARGET_CLASS}`)) {
+    // Some adapters use a native action bar as the stable message anchor.
+    // Its text target can be a sibling rather than a descendant, so include
+    // the adapter-resolved target explicitly when clearing a mode.
+    const role = site.getRole(message);
+    const directionTarget = role
+      ? site.getDirectionTarget(message, role)
+      : null;
+    if (directionTarget instanceof HTMLElement) targets.add(directionTarget);
+
+    for (const target of targets) {
       target.classList.remove(
         DIRECTION_TARGET_CLASS,
         RTL_CLASS,
