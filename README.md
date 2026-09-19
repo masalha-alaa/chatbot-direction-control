@@ -11,6 +11,9 @@ Features:
 - Change individual chatbot messages between LTR and RTL using the alignment icons below each message.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
+- Middle-click a recent ChatGPT sidebar conversation to open it in a background tab.
+  Project conversations are not included. Left-click, right-click, modified clicks,
+  wheel scrolling, and the row's pin/menu controls keep their native behavior.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
 The extension works entirely on your computer. It does not collect, send, upload, or
@@ -38,6 +41,8 @@ The extension separates generic behavior from chatbot-specific DOM knowledge:
 - `adapters/grok.js`: Grok selectors and DOM behavior.
 - `composer-direction.js`: generic composer shortcut handling for adapters that opt in.
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
+- `sidebar-navigation.js`: opt-in, generic middle-click handling for sidebar conversations.
+- `background.js`: validates tab-opening requests and opens an inactive tab in the source window.
 - `styles.css`: shared direction/button styling.
 
 `composer-direction.js` and `response-direction.js` contain no chatbot host checks.
@@ -67,6 +72,16 @@ Optional adapter hooks:
 - `getMessageStorageId(message, turn)`: returns a stable host-specific message/turn ID
   when the generic persistence fallback cannot infer one. Claude, for example, uses its
   virtualized conversation row index.
+- `getSidebarConversationLink(target)`: returns `{ element, url }` only for eligible
+  sidebar conversation rows; returns `null` for nested controls and unsupported areas.
+- `isSidebarConversationUrl(url)`: a pure URL-policy check, required with the previous
+  hook. It is also called in the service worker and must not access the DOM.
+  Only ChatGPT currently opts in, for recent chats whose HTML exposes a conversation ID.
+
+Sidebar navigation uses delegated mouse listeners, not hover scans or polling. It
+does not read conversation contents or store conversation IDs. The service worker
+uses `chrome.tabs.create({ active: false })`; no additional permissions are requested.
+Reload the extension and refresh existing ChatGPT tabs after installing this change.
 
 `getDirectionTarget()` must return the text/content element to align, not a user-message
 bubble container. This keeps bubble placement under the host application's control.
@@ -77,12 +92,13 @@ Adding another chatbot
 1. Add its URL pattern to `manifest.json`.
 2. Add a new file under `adapters/` for the chatbot.
 3. Register one adapter from that file with `ChatDirectionControl.registerAdapter(...)`.
-4. Add the adapter file to the manifest before the two generic controller scripts.
+4. Add the adapter file to the manifest before the generic controller scripts, and to
+   `background.js` if it opts into sidebar navigation.
 5. Only implement `getComposerTextBlocks(editor)` if the site's native composer shortcut
    behavior needs to be replaced.
 
 No host-specific condition should be added to `composer-direction.js` or
-`response-direction.js`.
+`response-direction.js`, `sidebar-navigation.js`, or `background.js`.
 
 Local test:
 
@@ -91,6 +107,10 @@ Local test:
 3. Click Load unpacked
 4. Select this folder
 5. Refresh ChatGPT, Gemini, Claude, or Grok
+
+Automated tests (Node.js): `npm ci` then `npm test`. Tests use a sanitized sidebar
+DOM fixture and mocked Chrome APIs; they do not replace a live unpacked-extension
+test. The npm dependencies are development-only and are not needed by the extension.
 
 ### Chrome Web Store link
 
