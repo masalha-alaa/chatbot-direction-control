@@ -109,6 +109,17 @@
       );
     },
 
+    getMessageStorageId(message) {
+      const role = this.getRole(message);
+      if (!role) return null;
+
+      // Measured live DOM: Gemini wraps each user/assistant pair in one DIV
+      // whose stable ID survives page reloads. The pair shares that ID, so the
+      // role is part of the storage identity to keep both settings distinct.
+      const turnId = message.parentElement?.id;
+      return turnId ? `${role}:turn:${turnId}` : null;
+    },
+
     findActionBar(turn, role) {
       if (!turn) return null;
 
