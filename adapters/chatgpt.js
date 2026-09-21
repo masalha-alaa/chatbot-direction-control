@@ -15,6 +15,12 @@
   const USER_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy message"]';
   const ASSISTANT_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy"]';
   const TURN_KEY_SELECTOR = "[data-turn-key]";
+  const SIDEBAR_CONVERSATION_KEY_ATTRIBUTE = "data-sidebar-chatgpt-conversation-key";
+  const CONVERSATION_ID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  const SIDEBAR_CONVERSATION_KEY_PATTERN = new RegExp(
+    `^chatgpt:conversation:(${CONVERSATION_ID_PATTERN})$`, "i"
+  );
+  const CONVERSATION_PATH_PATTERN = new RegExp(`^/c/${CONVERSATION_ID_PATTERN}$`, "i");
 
   // ChatGPT may wrap one native action button in an extra child container.
   const SINGLE_BUTTON_WRAPPER_MAX_BUTTONS = 1;
@@ -50,6 +56,43 @@
 
     matches(pageLocation) {
       return pageLocation.hostname === "chatgpt.com";
+    },
+
+    /**
+     * Recent chats currently render as buttons, not links. The surrounding
+     * list item exposes the conversation key. Project rows do not expose it;
+     * deliberately leave them alone rather than infer an ID from a title.
+     * This hook is queried only on mouse events, with no observers or polling.
+     */
+    getSidebarConversationLink(target) {
+      if (!(target instanceof Element)) return null;
+      const row = target.closest('.sidebar-item[role="button"]');
+      if (!row?.closest("#app-shell-sidebar")) return null;
+      if (row.closest("[data-sidebar-project-container-id]")
+        ?.getAttribute("data-sidebar-project-container-id") !== "chats") return null;
+      if (!row.querySelector("[data-thread-title]")) return null;
+
+      // Menu, pin, rename inputs, and any other nested controls retain their
+      // native behavior, even when the pointer is over their child SVG/text.
+      const control = target.closest(
+        'button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="menuitem"]'
+      );
+      if (control !== row || row.getAttribute("aria-disabled") === "true") return null;
+
+      const key = row.closest(`[${SIDEBAR_CONVERSATION_KEY_ATTRIBUTE}]`)
+        ?.getAttribute(SIDEBAR_CONVERSATION_KEY_ATTRIBUTE);
+      const match = SIDEBAR_CONVERSATION_KEY_PATTERN.exec(key || "");
+      if (!match) return null;
+      return { element: row, url: new URL(`/c/${match[1]}`, location.origin).href };
+    },
+
+    // Pure URL policy also used by the service worker. Never let a page-supplied
+    // message turn this feature into an arbitrary-URL tab opener.
+    isSidebarConversationUrl(url) {
+      return url.protocol === "https:" &&
+        url.hostname === "chatgpt.com" &&
+        !url.port && !url.username && !url.password && !url.search && !url.hash &&
+        CONVERSATION_PATH_PATTERN.test(url.pathname);
     },
 
     findComposerEditor(activeElement) {
