@@ -246,6 +246,19 @@
       );
     },
 
+    getMessageStorageId(message, turn) {
+      const role = this.getRole(message);
+      if (!role) return null;
+
+      const turnId =
+        turn?.id ||
+        message.closest?.('[data-scroll-anchor-root="true"]')?.id;
+
+      // Measured live DOM: each Grok message has its own stable response-* ID,
+      // and the ID survives page reloads. Include the role for consistency.
+      return turnId ? `${role}:turn:${turnId}` : null;
+    },
+
     findActionBar(turn, role) {
       if (!(turn instanceof HTMLElement)) return null;
 

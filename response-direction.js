@@ -23,12 +23,15 @@
   const DIRECTION_RTL = "rtl";
   const STORAGE_PREFIX = "cgpt-direction";
 
-  // Debounce rapid framework mutations, then periodically rescan as a safety
-  // net for action bars replaced asynchronously after streaming completes.
+  // Debounce rapid framework mutations. If a message appears before its native
+  // action bar is ready, retry only that message once instead of polling the
+  // entire page indefinitely.
   const MUTATION_DEBOUNCE_MS = 100;
-  const SAFETY_RESCAN_INTERVAL_MS = 750;
+  const ACTION_BAR_RETRY_DELAY_MS = 500;
 
   let scheduledScan = null;
+  const pendingActionBarRetries = new WeakMap();
+  const attemptedActionBarRetries = new WeakSet();
 
   function conversationKey() {
     return `${location.origin}${location.pathname}`;
@@ -220,6 +223,33 @@
     return button;
   }
 
+  function scheduleActionBarRetry(message) {
+    if (
+      pendingActionBarRetries.has(message) ||
+      attemptedActionBarRetries.has(message)
+    ) {
+      return;
+    }
+
+    attemptedActionBarRetries.add(message);
+    const retryId = setTimeout(() => {
+      pendingActionBarRetries.delete(message);
+      if (!message.isConnected) return;
+      injectToolbar(message);
+    }, ACTION_BAR_RETRY_DELAY_MS);
+
+    pendingActionBarRetries.set(message, retryId);
+  }
+
+  function clearActionBarRetry(message) {
+    const retryId = pendingActionBarRetries.get(message);
+    if (retryId !== undefined) {
+      clearTimeout(retryId);
+      pendingActionBarRetries.delete(message);
+    }
+    attemptedActionBarRetries.delete(message);
+  }
+
   async function injectToolbar(message) {
     if (!(message instanceof HTMLElement)) return;
 
@@ -232,7 +262,12 @@
     // Native action controls are the completion signal for generated replies.
     // Waiting for them prevents buttons from appearing during "Thinking...".
     const actionBar = site.findActionBar(turn, role);
-    if (!actionBar) return;
+    if (!actionBar) {
+      scheduleActionBarRetry(message);
+      return;
+    }
+
+    clearActionBarRetry(message);
 
     const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
     if (existingToolbar) {
@@ -288,5 +323,4 @@
     subtree: true
   });
 
-  setInterval(scanMessages, SAFETY_RESCAN_INTERVAL_MS);
 })();

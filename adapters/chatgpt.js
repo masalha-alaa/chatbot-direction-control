@@ -14,6 +14,7 @@
   const ACTION_BAR_SELECTOR = ".turn-action-controls";
   const USER_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy message"]';
   const ASSISTANT_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy"]';
+  const TURN_KEY_SELECTOR = "[data-turn-key]";
 
   // ChatGPT may wrap one native action button in an extra child container.
   const SINGLE_BUTTON_WRAPPER_MAX_BUTTONS = 1;
@@ -48,10 +49,7 @@
     id: "chatgpt",
 
     matches(pageLocation) {
-      return (
-        pageLocation.hostname === "chatgpt.com" ||
-        pageLocation.hostname === "chat.openai.com"
-      );
+      return pageLocation.hostname === "chatgpt.com";
     },
 
     findComposerEditor(activeElement) {
@@ -107,6 +105,20 @@
         message.closest('[data-testid^="conversation-turn-"]') ||
         message.parentElement
       );
+    },
+
+    getMessageStorageId(message, turn) {
+      const role = this.getRole(message);
+      if (!role) return null;
+
+      const turnWithKey =
+        message.closest?.(TURN_KEY_SELECTOR) ||
+        turn?.closest?.(TURN_KEY_SELECTOR);
+      const turnKey = turnWithKey?.getAttribute?.("data-turn-key");
+
+      // ChatGPT gives the user and assistant messages in one exchange the same
+      // persistent turn key, so include the role to keep their settings distinct.
+      return turnKey ? `${role}:turn:${turnKey}` : null;
     },
 
     findActionBar(turn) {
