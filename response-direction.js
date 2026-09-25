@@ -11,6 +11,13 @@
   const extensionApi = globalThis.ChatDirectionControl;
   const site = extensionApi?.getCurrentSiteAdapter?.();
   if (!site) return;
+  const settings = globalThis.ChatDirectionSettings;
+  const roleEnabled = message => settings.enabled(site.id, site.getRole(message));
+  const remembersAlignment = () => settings.enabled(site.id, "rememberAlignment");
+  // Keep current-page choices across host rerenders even with persistence off.
+  const pageModes = new Map();
+  const pendingLoads = new Map();
+  let settingsRevision = 0;
 
   const TOOLBAR_CLASS = "cgpt-direction-toolbar";
   const BUTTON_CLASS = "cgpt-direction-button";
@@ -132,7 +139,7 @@
     const target = site.getDirectionTarget(message, role);
     if (!(target instanceof HTMLElement)) return;
 
-    target.classList.add(DIRECTION_TARGET_CLASS);
+    if (mode) target.classList.add(DIRECTION_TARGET_CLASS);
     if (mode === DIRECTION_RTL) target.classList.add(RTL_CLASS);
     if (mode === DIRECTION_LTR) target.classList.add(LTR_CLASS);
 
@@ -142,7 +149,8 @@
       message,
       role,
       target,
-      mode
+      mode,
+      punctuationEnabled: settings.enabled(site.id, "rtlPunctuation")
     });
   }
 
@@ -213,12 +221,15 @@
       event.preventDefault();
       event.stopPropagation();
 
+      if (!roleEnabled(message)) return;
       const currentMode = message.dataset.cgptDirection;
       const nextMode = currentMode === mode ? null : mode;
+      const key = storageKey(messageId);
+      pageModes.set(key, nextMode);
       setMode(message, nextMode);
+      if (!remembersAlignment()) return;
 
       try {
-        const key = storageKey(messageId);
         if (nextMode) {
           await chrome.storage.local.set({ [key]: nextMode });
         } else {
@@ -267,6 +278,12 @@
 
     const turn = site.getTurn(message);
     if (!turn) return;
+    if (!roleEnabled(message)) {
+      clearActionBarRetry(message);
+      findToolbar(message)?.remove();
+      setMode(message, null);
+      return;
+    }
 
     // Native action controls are the completion signal for generated replies.
     // Waiting for them prevents buttons from appearing during "Thinking...".
@@ -278,12 +295,11 @@
 
     clearActionBarRetry(message);
 
+    const messageId = getMessageId(message, turn);
+    const key = storageKey(messageId);
     const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
     if (existingToolbar) {
-      const currentMode = message.dataset.cgptDirection;
-      if (currentMode === DIRECTION_RTL || currentMode === DIRECTION_LTR) {
-        applyModeClasses(message, currentMode);
-      }
+      restoreMode(message, key);
       return;
     }
 
@@ -293,7 +309,6 @@
       .querySelectorAll?.(`.${TOOLBAR_CLASS}`)
       .forEach((toolbar) => toolbar.remove());
 
-    const messageId = getMessageId(message, turn);
     const toolbar = document.createElement("span");
     toolbar.className = TOOLBAR_CLASS;
     toolbar.dataset.site = site.id;
@@ -304,15 +319,30 @@
     toolbar.appendChild(createDirectionButton(DIRECTION_RTL, message, messageId));
     actionBar.appendChild(toolbar);
 
+    restoreMode(message, key);
+  }
+
+  async function restoreMode(message, key) {
+    if (pageModes.has(key)) {
+      setMode(message, pageModes.get(key));
+      return;
+    }
+    if (!remembersAlignment() || pendingLoads.has(key)) return;
+    const revision = settingsRevision;
+    const request = {};
+    pendingLoads.set(key, request);
     try {
-      const key = storageKey(messageId);
       const saved = await chrome.storage.local.get(key);
-      const savedMode = saved[key];
-      if (savedMode === DIRECTION_RTL || savedMode === DIRECTION_LTR) {
-        setMode(message, savedMode);
-      }
+      if (revision !== settingsRevision || !roleEnabled(message) ||
+          !message.isConnected || !remembersAlignment() || pageModes.has(key) ||
+          !key.startsWith(`${STORAGE_PREFIX}|${conversationKey()}|`)) return;
+      const mode = [DIRECTION_RTL, DIRECTION_LTR].includes(saved[key]) ? saved[key] : null;
+      pageModes.set(key, mode);
+      setMode(message, mode);
     } catch (error) {
       console.debug("Direction extension storage error:", error);
+    } finally {
+      if (pendingLoads.get(key) === request) pendingLoads.delete(key);
     }
   }
 
@@ -325,7 +355,12 @@
     scheduledScan = setTimeout(scanMessages, MUTATION_DEBOUNCE_MS);
   }
 
-  scanMessages();
+  settings.subscribe(() => {
+    settingsRevision += 1;
+    pendingLoads.clear();
+    scanMessages();
+  });
+  settings.ready.then(scanMessages);
 
   new MutationObserver(scheduleScan).observe(document.documentElement, {
     childList: true,
