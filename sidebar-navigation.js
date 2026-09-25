@@ -6,8 +6,11 @@
   if (typeof site?.getSidebarConversationLink !== "function" ||
       typeof site?.isSidebarConversationUrl !== "function") return;
 
+  const settings = globalThis.ChatDirectionSettings;
+  const enabled = () => settings.enabled(site.id, "middleClick");
   const MIDDLE_BUTTON = 1;
   let pressedLink = null;
+  settings.subscribe(() => { pressedLink = null; });
 
   function isPlainMiddleClick(event) {
     return event.isTrusted && event.button === MIDDLE_BUTTON &&
@@ -35,7 +38,7 @@
   // Capturing on window runs before the host's delegated document handlers.
   window.addEventListener("mousedown", (event) => {
     pressedLink = null;
-    if (!isPlainMiddleClick(event) || event.defaultPrevented) return;
+    if (!enabled() || !isPlainMiddleClick(event) || event.defaultPrevented) return;
     pressedLink = getLink(event);
     if (pressedLink) consume(event);
   }, true);
@@ -45,7 +48,7 @@
   window.addEventListener("auxclick", (event) => {
     const pressed = pressedLink;
     pressedLink = null;
-    if (!pressed || !isPlainMiddleClick(event) || event.defaultPrevented) return;
+    if (!enabled() || !pressed || !isPlainMiddleClick(event) || event.defaultPrevented) return;
     const released = getLink(event);
     if (!released || released.element !== pressed.element || released.url !== pressed.url) return;
     consume(event);
