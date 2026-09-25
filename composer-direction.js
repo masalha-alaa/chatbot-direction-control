@@ -6,6 +6,8 @@
   const extensionApi = globalThis.ChatDirectionControl;
   const site = extensionApi?.getCurrentSiteAdapter?.();
   if (!site) return;
+  const settings = globalThis.ChatDirectionSettings;
+  const enabled = () => settings.enabled(site.id, "composer");
 
   const LEFT_CHORD = Object.freeze(["ControlLeft", "ShiftLeft"]);
   const RIGHT_CHORD = Object.freeze(["ControlRight", "ShiftRight"]);
@@ -67,6 +69,10 @@
   }
 
   function rebuildParagraphStyles() {
+    if (!enabled()) {
+      document.getElementById(COMPOSER_STYLE_ID)?.remove();
+      return;
+    }
     const rules = [];
 
     for (const [key, direction] of paragraphDirections) {
@@ -131,6 +137,7 @@
   document.addEventListener(
     "keydown",
     (event) => {
+      if (!enabled()) return;
       if (!directionKeys.has(event.code)) {
         // Any other key used while Ctrl/Shift is already held means this is a
         // larger keyboard shortcut, not a direction-change gesture.
@@ -173,6 +180,7 @@
   document.addEventListener(
     "keyup",
     (event) => {
+      if (!enabled()) return;
       const isDirectionKey = directionKeys.has(event.code);
       const shouldApply =
         isDirectionKey &&
@@ -207,6 +215,13 @@
     },
     true
   );
+
+  settings.subscribe(() => {
+    pressedKeys.clear();
+    pendingShortcut = null;
+    shortcutCancelled = false;
+    if (paragraphDirections.size) rebuildParagraphStyles();
+  });
 
   window.addEventListener("blur", () => {
     pressedKeys.clear();
