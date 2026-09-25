@@ -12,6 +12,9 @@
   "permissions": [
     "storage"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -27,7 +30,8 @@
         "adapters/claude.js",
         "adapters/grok.js",
         "composer-direction.js",
-        "response-direction.js"
+        "response-direction.js",
+        "sidebar-navigation.js"
       ],
       "css": [
         "styles.css"
