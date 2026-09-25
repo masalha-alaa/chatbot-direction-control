@@ -20,29 +20,41 @@ Useful if you regularly switch between languages such as English, Arabic, and He
 The extension works entirely on your computer. It does not collect, send, upload, or
 share your messages, settings, or any other data with external servers.
 
-Settings popup preview
-----------------------
+Settings popup
+--------------
 
-Click the extension's toolbar icon to open the dark settings popup. This branch
-contains the UI only: switches, chatbot sections, counts, and dependent controls
-work inside the popup, but do not change any chatbot behavior. The master switch
-also affects only the popup in this preview.
+Click the extension's toolbar icon to open the dark settings popup. Settings are
+saved locally with `chrome.storage.local` and apply to open chatbot pages without
+reloading. After installing or reloading the extension itself, refresh existing
+chatbot tabs once so they load the updated content scripts.
 
-Preview choices persist separately in extension-page localStorage under
-`cdc:popup-ui-preview:v1`. They do not modify saved message alignments or write
-to `chrome.storage`. The displayed version comes from the installed manifest.
+- **Enable extension** pauses all extension features while keeping your choices
+  and saved alignments. Re-enabling restores the current page's alignment choices.
+- **Remember alignment**, first in each chatbot group, saves per-message alignment
+  and restores it after reload. When off, choices last only for the current page
+  (including host rerenders); existing saved alignments are kept but ignored until
+  this setting is enabled again.
+- **Message box control** enables paragraph-level keyboard direction shortcuts for
+  ChatGPT, Claude, and Grok. Gemini keeps its native behavior and has no such toggle.
+- **User alignment buttons** and **Assistant alignment buttons** independently
+  control the added buttons and alignment overrides for each message role.
+- **Fix RTL punctuation** corrects trailing punctuation in ChatGPT RTL messages.
+  It is disabled when both alignment-button settings are off; its choice is kept.
+  Disabling it restores punctuation in currently processed messages.
+- **Mouse middle click** opens supported ChatGPT sidebar chats and project folders
+  in new background tabs. Both the content script and background worker enforce
+  this preference and the master switch.
 
-Each chatbot starts with Remember alignment. Gemini has no Message box control.
-ChatGPT additionally shows Fix RTL punctuation above Mouse middle click; the
-punctuation switch is disabled when both alignment-button switches are off,
-while preserving its selected value. The underlying punctuation and middle-click
-features are not included or activated by this UI branch.
+Middle-click tabs and RTL punctuation default to **off**. Every other setting
+starts **on**. Settings are stored as independent `cdc:settings:` keys, separate
+from existing `cgpt-direction|` alignment records. UI prototype preferences are
+not imported. The displayed extension version comes from the manifest.
 
-To review: reload the unpacked extension, click its toolbar icon, try the
-switches and chatbot sections, then close and reopen the popup to check saved
-choices. Turn off both ChatGPT alignment-button switches to check the punctuation
-dependency. Existing chatbot controls should continue working regardless of the
-popup switch positions.
+Run `npm ci` then `npm test` for storage, popup, controller, and tab-worker tests.
+For a browser check, load the extension unpacked, refresh chatbot tabs, and try
+both message-role switches, paragraph shortcuts, persistence across reloads,
+the punctuation dependency, and middle-click on supported sidebar rows. Check
+that the master switch pauses these features and retains individual choices.
 
 Composer shortcut behavior
 --------------------------

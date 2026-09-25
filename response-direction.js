@@ -17,6 +17,7 @@
   // Keep current-page choices across host rerenders even with persistence off.
   const pageModes = new Map();
   const pendingLoads = new Map();
+  const messageKeys = new WeakMap();
   let settingsRevision = 0;
 
   const TOOLBAR_CLASS = "cgpt-direction-toolbar";
@@ -297,6 +298,11 @@
 
     const messageId = getMessageId(message, turn);
     const key = storageKey(messageId);
+    if (messageKeys.has(message) && messageKeys.get(message) !== key) {
+      findToolbar(message)?.remove();
+      setMode(message, null);
+    }
+    messageKeys.set(message, key);
     const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
     if (existingToolbar) {
       restoreMode(message, key);
@@ -333,12 +339,13 @@
     pendingLoads.set(key, request);
     try {
       const saved = await chrome.storage.local.get(key);
-      if (revision !== settingsRevision || !roleEnabled(message) ||
-          !message.isConnected || !remembersAlignment() || pageModes.has(key) ||
+      if (revision !== settingsRevision || pendingLoads.get(key) !== request || !roleEnabled(message) ||
+          !remembersAlignment() || pageModes.has(key) ||
           !key.startsWith(`${STORAGE_PREFIX}|${conversationKey()}|`)) return;
       const mode = [DIRECTION_RTL, DIRECTION_LTR].includes(saved[key]) ? saved[key] : null;
       pageModes.set(key, mode);
-      setMode(message, mode);
+      if (message.isConnected) setMode(message, mode);
+      else scheduleScan();
     } catch (error) {
       console.debug("Direction extension storage error:", error);
     } finally {

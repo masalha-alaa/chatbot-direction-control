@@ -5,6 +5,8 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { parseHTML } = require("linkedom");
 
+const { storageHarness } = require("./storage-harness.cjs");
+
 const root = path.resolve(__dirname, "..");
 const ID = "11111111-2222-3333-4444-555555555555";
 const OTHER_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -55,13 +57,15 @@ const fixture = `<!doctype html><html><body>
   <main id="main">${row("outside")}</main>
 </body></html>`;
 
-function pageHarness(hostname = "chatgpt.com") {
+function pageHarness(hostname = "chatgpt.com", enabled = true) {
+  const subscriptions = [];
+  const settings = { enabled: () => enabled, subscribe: fn => subscriptions.push(fn) };
   const { document, Element, HTMLElement } = parseHTML(fixture);
   const listeners = new Map();
   const sent = [];
   const location = new URL(`https://${hostname}/c/${OTHER_ID}`);
   const context = vm.createContext({
-    document, Element, HTMLElement, URL, location, console,
+    document, Element, HTMLElement, URL, location, console, ChatDirectionSettings: settings,
     window: { addEventListener(type, handler, capture) {
       assert.equal(capture, true);
       listeners.set(type, handler);
@@ -80,7 +84,7 @@ function pageHarness(hostname = "chatgpt.com") {
     listeners.get(type)?.(e);
     return e;
   }
-  return { document, site, sent, listeners, event, el: id => document.getElementById(id) };
+  return { setEnabled(value) { enabled = value; subscriptions.forEach(fn => fn()); }, document, site, sent, listeners, event, el: id => document.getElementById(id) };
 }
 
 test("recent title and row resolve the exposed ID, never the title", () => {
@@ -246,10 +250,12 @@ test("other chatbot adapters do not opt in", () => {
   }
 });
 
-function workerHarness(failCreation = false) {
+function workerHarness(failCreation = false, preferences = { "cdc:settings:chatgpt.middleClick": true }) {
+  const { storage } = storageHarness(preferences);
   let onMessage;
   const created = [];
   const context = vm.createContext({ URL, console, chrome: {
+    storage,
     runtime: { id:"extension-id", onMessage:{addListener(fn) {onMessage=fn;}} },
     tabs: { create: async options => {
       if (failCreation) throw new Error("Tab closed");
@@ -321,4 +327,27 @@ test("manifest includes the worker/controller, with unchanged version and permis
   assert.equal(manifest.background.service_worker, "background.js");
   assert(manifest.content_scripts[0].js.includes("sidebar-navigation.js"));
   for (const script of manifest.content_scripts[0].js) assert(fs.existsSync(path.join(root,script)));
+});
+
+
+test("disabled middle-click leaves native events alone and cancels a pending press", () => {
+  const h = pageHarness("chatgpt.com", false);
+  const target = h.el("recent-title");
+  assert.equal(h.event("mousedown", target).defaultPrevented, false);
+  h.event("auxclick", target);
+  assert.equal(h.sent.length, 0);
+  h.setEnabled(true);
+  assert.equal(h.event("mousedown", target).defaultPrevented, true);
+  h.setEnabled(false);
+  h.setEnabled(true);
+  h.event("auxclick", target);
+  assert.equal(h.sent.length, 0);
+});
+
+test("worker refuses default-off middle-click and master-off requests", async () => {
+  for (const preferences of [{}, { "cdc:settings:chatgpt.middleClick": true, "cdc:settings:enabled": false }]) {
+    const h = workerHarness(false, preferences);
+    assert.equal((await h.request()).ok, false);
+    assert.equal(h.created.length, 0);
+  }
 });
