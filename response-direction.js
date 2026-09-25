@@ -6,11 +6,25 @@
    *
    * This file owns storage, buttons, persistence and DOM observation. It knows
    * nothing about chatbot-specific selectors; those live in adapter files.
+   *
+   * Settings changes apply live: disabling a role/master removes its controls
+   * and alignment overrides, while keeping cached choices and stored records.
+   * Remember alignment controls storage reads/writes, not current-page choices.
+   * The page cache survives host rerenders and role toggles but not a reload.
+   * Changing that preference does not erase old records or bulk-save the cache.
    */
 
   const extensionApi = globalThis.ChatDirectionControl;
   const site = extensionApi?.getCurrentSiteAdapter?.();
   if (!site) return;
+  const settings = globalThis.ChatDirectionSettings;
+  const roleEnabled = message => settings.enabled(site.id, site.getRole(message));
+  const remembersAlignment = () => settings.enabled(site.id, "rememberAlignment");
+  // Keep current-page choices across host rerenders even with persistence off.
+  const pageModes = new Map();
+  const pendingLoads = new Map();
+  const messageKeys = new WeakMap();
+  let settingsRevision = 0;
 
   const TOOLBAR_CLASS = "cgpt-direction-toolbar";
   const BUTTON_CLASS = "cgpt-direction-button";
@@ -123,6 +137,13 @@
     }
   }
 
+  /**
+   * Replace visible direction classes and run the adapter's optional correction.
+   * Passing null removes overrides and allows the adapter to restore punctuation.
+   * This function does not persist a preference; callers enforce role settings.
+   * @param {HTMLElement} message Adapter-provided message anchor.
+   * @param {"ltr"|"rtl"|null|undefined} mode
+   */
   function applyModeClasses(message, mode) {
     clearDirectionClasses(message);
 
@@ -132,7 +153,7 @@
     const target = site.getDirectionTarget(message, role);
     if (!(target instanceof HTMLElement)) return;
 
-    target.classList.add(DIRECTION_TARGET_CLASS);
+    if (mode) target.classList.add(DIRECTION_TARGET_CLASS);
     if (mode === DIRECTION_RTL) target.classList.add(RTL_CLASS);
     if (mode === DIRECTION_LTR) target.classList.add(LTR_CLASS);
 
@@ -142,7 +163,8 @@
       message,
       role,
       target,
-      mode
+      mode,
+      punctuationEnabled: settings.enabled(site.id, "rtlPunctuation")
     });
   }
 
@@ -158,6 +180,13 @@
     );
   }
 
+  /**
+   * Synchronize visible alignment, the message dataset, and button state only.
+   * pageModes/storage are deliberately separate so disabling a role can clear
+   * its displayed alignment without forgetting the user's choice.
+   * @param {HTMLElement} message
+   * @param {"ltr"|"rtl"|null} mode
+   */
   function setMode(message, mode) {
     applyModeClasses(message, mode);
 
@@ -209,16 +238,21 @@
       button.innerHTML = alignmentIcon("left");
     }
 
+    // Recheck the role at click time in case settings changed after insertion.
+    // Cache the choice before storage I/O so an older load cannot overwrite it.
     button.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
 
+      if (!roleEnabled(message)) return;
       const currentMode = message.dataset.cgptDirection;
       const nextMode = currentMode === mode ? null : mode;
+      const key = storageKey(messageId);
+      pageModes.set(key, nextMode);
       setMode(message, nextMode);
+      if (!remembersAlignment()) return;
 
       try {
-        const key = storageKey(messageId);
         if (nextMode) {
           await chrome.storage.local.set({ [key]: nextMode });
         } else {
@@ -259,6 +293,13 @@
     attemptedActionBarRetries.delete(message);
   }
 
+  /**
+   * Reconcile one message with live role/master settings. Disabled roles lose
+   * controls and visible overrides; enabled roles get controls once the native
+   * action bar exists. Recycled anchors are reset when their storage key changes.
+   * @param {HTMLElement} message
+   * @returns {Promise<void>}
+   */
   async function injectToolbar(message) {
     if (!(message instanceof HTMLElement)) return;
 
@@ -267,6 +308,12 @@
 
     const turn = site.getTurn(message);
     if (!turn) return;
+    if (!roleEnabled(message)) {
+      clearActionBarRetry(message);
+      findToolbar(message)?.remove();
+      setMode(message, null);
+      return;
+    }
 
     // Native action controls are the completion signal for generated replies.
     // Waiting for them prevents buttons from appearing during "Thinking...".
@@ -278,12 +325,16 @@
 
     clearActionBarRetry(message);
 
+    const messageId = getMessageId(message, turn);
+    const key = storageKey(messageId);
+    if (messageKeys.has(message) && messageKeys.get(message) !== key) {
+      findToolbar(message)?.remove();
+      setMode(message, null);
+    }
+    messageKeys.set(message, key);
     const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
     if (existingToolbar) {
-      const currentMode = message.dataset.cgptDirection;
-      if (currentMode === DIRECTION_RTL || currentMode === DIRECTION_LTR) {
-        applyModeClasses(message, currentMode);
-      }
+      restoreMode(message, key);
       return;
     }
 
@@ -293,7 +344,6 @@
       .querySelectorAll?.(`.${TOOLBAR_CLASS}`)
       .forEach((toolbar) => toolbar.remove());
 
-    const messageId = getMessageId(message, turn);
     const toolbar = document.createElement("span");
     toolbar.className = TOOLBAR_CLASS;
     toolbar.dataset.site = site.id;
@@ -304,15 +354,41 @@
     toolbar.appendChild(createDirectionButton(DIRECTION_RTL, message, messageId));
     actionBar.appendChild(toolbar);
 
+    restoreMode(message, key);
+  }
+
+  /**
+   * Prefer this page's choice; otherwise read storage only when remembering is
+   * enabled. null in pageModes is an intentional/default mode, not a cache miss.
+   * Revision/request checks discard superseded reads; role, conversation and
+   * cache checks prevent late results from undoing a click or settings change.
+   * A replaced message schedules a scan so its successor gets the loaded mode.
+   * @param {HTMLElement} message
+   * @param {string} key Origin + conversation path + stable message identity.
+   * @returns {Promise<void>}
+   */
+  async function restoreMode(message, key) {
+    if (pageModes.has(key)) {
+      setMode(message, pageModes.get(key));
+      return;
+    }
+    if (!remembersAlignment() || pendingLoads.has(key)) return;
+    const revision = settingsRevision;
+    const request = {};
+    pendingLoads.set(key, request);
     try {
-      const key = storageKey(messageId);
       const saved = await chrome.storage.local.get(key);
-      const savedMode = saved[key];
-      if (savedMode === DIRECTION_RTL || savedMode === DIRECTION_LTR) {
-        setMode(message, savedMode);
-      }
+      if (revision !== settingsRevision || pendingLoads.get(key) !== request || !roleEnabled(message) ||
+          !remembersAlignment() || pageModes.has(key) ||
+          !key.startsWith(`${STORAGE_PREFIX}|${conversationKey()}|`)) return;
+      const mode = [DIRECTION_RTL, DIRECTION_LTR].includes(saved[key]) ? saved[key] : null;
+      pageModes.set(key, mode);
+      if (message.isConnected) setMode(message, mode);
+      else scheduleScan();
     } catch (error) {
       console.debug("Direction extension storage error:", error);
+    } finally {
+      if (pendingLoads.get(key) === request) pendingLoads.delete(key);
     }
   }
 
@@ -325,7 +401,14 @@
     scheduledScan = setTimeout(scanMessages, MUTATION_DEBOUNCE_MS);
   }
 
-  scanMessages();
+  // Reconcile immediately on settings notifications, independent of whether
+  // the popup remains open. Invalidating pending reads prevents stale recovery.
+  settings.subscribe(() => {
+    settingsRevision += 1;
+    pendingLoads.clear();
+    scanMessages();
+  });
+  settings.ready.then(scanMessages);
 
   new MutationObserver(scheduleScan).observe(document.documentElement, {
     childList: true,

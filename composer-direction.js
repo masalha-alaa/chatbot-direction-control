@@ -1,11 +1,22 @@
 (() => {
   "use strict";
 
-  /** Generic composer keyboard-shortcut controller. */
+  /**
+   * Paragraph-level keyboard direction controller, gated by master + composer.
+   * Listeners remain registered for this page; each key event reads the settings
+   * cache so changes take effect immediately, including between press/release.
+   * Gemini has no composer setting and its native shortcuts remain untouched.
+   *
+   * Disabling the feature removes its CSS overrides, returning composed text
+   * to host styling. Paragraph choices stay in memory and are reapplied when
+   * re-enabled on this page; they are not persisted by Remember alignment.
+   */
 
   const extensionApi = globalThis.ChatDirectionControl;
   const site = extensionApi?.getCurrentSiteAdapter?.();
   if (!site) return;
+  const settings = globalThis.ChatDirectionSettings;
+  const enabled = () => settings.enabled(site.id, "composer");
 
   const LEFT_CHORD = Object.freeze(["ControlLeft", "ShiftLeft"]);
   const RIGHT_CHORD = Object.freeze(["ControlRight", "ShiftRight"]);
@@ -66,7 +77,16 @@
     return instanceId;
   }
 
+  /**
+   * Rebuild this page's external CSS from saved paragraph positions, or remove
+   * it when disabled. This deliberately changes existing text alignment too;
+   * disabling is not limited to ignoring future keyboard shortcuts.
+   */
   function rebuildParagraphStyles() {
+    if (!enabled()) {
+      document.getElementById(COMPOSER_STYLE_ID)?.remove();
+      return;
+    }
     const rules = [];
 
     for (const [key, direction] of paragraphDirections) {
@@ -90,6 +110,11 @@
     styleElement.textContent = rules.join("\n");
   }
 
+  /**
+   * Update the current or selected paragraphs without mutating managed text DOM.
+   * @param {HTMLElement} editor Active contenteditable composer.
+   * @param {"ltr"|"rtl"} direction
+   */
   function setParagraphDirection(editor, direction) {
     const paragraphs = site.getComposerTextBlocks(editor);
     const selectedParagraphs = getSelectedParagraphs(editor, paragraphs);
@@ -131,6 +156,7 @@
   document.addEventListener(
     "keydown",
     (event) => {
+      if (!enabled()) return;
       if (!directionKeys.has(event.code)) {
         // Any other key used while Ctrl/Shift is already held means this is a
         // larger keyboard shortcut, not a direction-change gesture.
@@ -173,6 +199,7 @@
   document.addEventListener(
     "keyup",
     (event) => {
+      if (!enabled()) return;
       const isDirectionKey = directionKeys.has(event.code);
       const shouldApply =
         isDirectionKey &&
@@ -207,6 +234,16 @@
     },
     true
   );
+
+  // Cancel any incomplete chord on a settings notification so releasing its
+  // keys cannot apply an old gesture after disable/re-enable. Keep paragraph
+  // choices and update their visible styles according to the effective setting.
+  settings.subscribe(() => {
+    pressedKeys.clear();
+    pendingShortcut = null;
+    shortcutCancelled = false;
+    if (paragraphDirections.size) rebuildParagraphStyles();
+  });
 
   window.addEventListener("blur", () => {
     pressedKeys.clear();

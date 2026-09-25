@@ -26,9 +26,7 @@
   const PROJECT_ID_REGEXP = new RegExp(`^${PROJECT_ID_PATTERN}$`, "i");
   const PROJECT_PATH_PATTERN = new RegExp(`^/g/${PROJECT_ID_PATTERN}/project$`, "i");
 
-  // Feature flag for ChatGPT's RTL <bdi> trailing-punctuation correction.
-  // Keep this as one switch so a future settings control can replace it.
-  const ENABLE_RTL_BDI_PUNCTUATION_FIX = true;
+  // Markup used by the optional RTL <bdi> trailing-punctuation correction.
   const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
   const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
   const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
@@ -307,10 +305,17 @@
       ]) || message;
     },
 
-    onDirectionModeApplied({ target, mode }) {
+    /**
+     * Opt-in correction for trailing punctuation isolated inside ChatGPT BDI.
+     * The controller supplies the effective setting and role-approved mode.
+     * Disabling the setting or leaving RTL restores previously moved text.
+     * @param {{target: HTMLElement, mode: string|null,
+     *   punctuationEnabled?: boolean}} options
+     */
+    onDirectionModeApplied({ target, mode, punctuationEnabled = false }) {
       if (!(target instanceof HTMLElement)) return;
 
-      if (!ENABLE_RTL_BDI_PUNCTUATION_FIX || mode !== "rtl") {
+      if (!punctuationEnabled || mode !== "rtl") {
         restoreRtlBdiPunctuation(target);
         return;
       }
