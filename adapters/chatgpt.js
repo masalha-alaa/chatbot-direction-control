@@ -21,6 +21,10 @@
     `^chatgpt:conversation:(${CONVERSATION_ID_PATTERN})$`, "i"
   );
   const CONVERSATION_PATH_PATTERN = new RegExp(`^/c/${CONVERSATION_ID_PATTERN}$`, "i");
+  const SIDEBAR_PROJECT_ID_ATTRIBUTE = "data-app-action-sidebar-project-id";
+  const PROJECT_ID_PATTERN = "g-p-[0-9a-f]{32}";
+  const PROJECT_ID_REGEXP = new RegExp(`^${PROJECT_ID_PATTERN}$`, "i");
+  const PROJECT_PATH_PATTERN = new RegExp(`^/g/${PROJECT_ID_PATTERN}/project$`, "i");
 
   // ChatGPT may wrap one native action button in an extra child container.
   const SINGLE_BUTTON_WRAPPER_MAX_BUTTONS = 1;
@@ -59,18 +63,15 @@
     },
 
     /**
-     * Recent chats currently render as buttons, not links. The surrounding
-     * list item exposes the conversation key. Project rows do not expose it;
-     * deliberately leave them alone rather than infer an ID from a title.
+     * Recent chats expose a conversation key on their surrounding list item;
+     * project folders expose a project ID directly on their row. Conversations
+     * inside projects still lack an exposed ID and remain unsupported.
      * This hook is queried only on mouse events, with no observers or polling.
      */
     getSidebarConversationLink(target) {
       if (!(target instanceof Element)) return null;
       const row = target.closest('.sidebar-item[role="button"]');
       if (!row?.closest("#app-shell-sidebar")) return null;
-      if (row.closest("[data-sidebar-project-container-id]")
-        ?.getAttribute("data-sidebar-project-container-id") !== "chats") return null;
-      if (!row.querySelector("[data-thread-title]")) return null;
 
       // Menu, pin, rename inputs, and any other nested controls retain their
       // native behavior, even when the pointer is over their child SVG/text.
@@ -78,6 +79,18 @@
         'button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="menuitem"]'
       );
       if (control !== row || row.getAttribute("aria-disabled") === "true") return null;
+
+      // Live project-folder DOM verified on 2026-09-23. Read the ID only from
+      // the folder row, never an ancestor of a nested project conversation.
+      if (row.hasAttribute("data-app-action-sidebar-project-row")) {
+        const projectId = row.getAttribute(SIDEBAR_PROJECT_ID_ATTRIBUTE);
+        if (!PROJECT_ID_REGEXP.test(projectId || "")) return null;
+        return { element: row, url: new URL(`/g/${projectId}/project`, location.origin).href };
+      }
+
+      if (row.closest("[data-sidebar-project-container-id]")
+        ?.getAttribute("data-sidebar-project-container-id") !== "chats") return null;
+      if (!row.querySelector("[data-thread-title]")) return null;
 
       const key = row.closest(`[${SIDEBAR_CONVERSATION_KEY_ATTRIBUTE}]`)
         ?.getAttribute(SIDEBAR_CONVERSATION_KEY_ATTRIBUTE);
@@ -92,7 +105,7 @@
       return url.protocol === "https:" &&
         url.hostname === "chatgpt.com" &&
         !url.port && !url.username && !url.password && !url.search && !url.hash &&
-        CONVERSATION_PATH_PATTERN.test(url.pathname);
+        (CONVERSATION_PATH_PATTERN.test(url.pathname) || PROJECT_PATH_PATTERN.test(url.pathname));
     },
 
     findComposerEditor(activeElement) {

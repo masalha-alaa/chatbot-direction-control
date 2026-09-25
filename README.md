@@ -11,9 +11,10 @@ Features:
 - Change individual chatbot messages between LTR and RTL using the alignment icons below each message.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
-- Middle-click a recent ChatGPT sidebar conversation to open it in a background tab.
-  Project conversations are not included. Left-click, right-click, modified clicks,
-  wheel scrolling, and the row's pin/menu controls keep their native behavior.
+- Middle-click a recent ChatGPT sidebar conversation or a project folder to open it
+  in a background tab. Project folders open their project page; conversations inside
+  projects are not included. Left-click, right-click, modified clicks, wheel scrolling,
+  and the row's pin/menu/new-chat controls keep their native behavior.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
 The extension works entirely on your computer. It does not collect, send, upload, or
@@ -41,7 +42,7 @@ The extension separates generic behavior from chatbot-specific DOM knowledge:
 - `adapters/grok.js`: Grok selectors and DOM behavior.
 - `composer-direction.js`: generic composer shortcut handling for adapters that opt in.
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
-- `sidebar-navigation.js`: opt-in, generic middle-click handling for sidebar conversations.
+- `sidebar-navigation.js`: opt-in, generic middle-click handling for sidebar conversations and project folders.
 - `background.js`: validates tab-opening requests and opens an inactive tab in the source window.
 - `styles.css`: shared direction/button styling.
 
@@ -73,10 +74,11 @@ Optional adapter hooks:
   when the generic persistence fallback cannot infer one. Claude, for example, uses its
   virtualized conversation row index.
 - `getSidebarConversationLink(target)`: returns `{ element, url }` only for eligible
-  sidebar conversation rows; returns `null` for nested controls and unsupported areas.
+  sidebar conversation or project-folder rows; returns `null` for nested controls and unsupported areas.
 - `isSidebarConversationUrl(url)`: a pure URL-policy check, required with the previous
   hook. It is also called in the service worker and must not access the DOM.
-  Only ChatGPT currently opts in, for recent chats whose HTML exposes a conversation ID.
+  Only ChatGPT currently opts in, for recent chats and project folders whose HTML
+  exposes the corresponding conversation or project ID.
 
 Sidebar navigation uses delegated mouse listeners, not hover scans or polling. It
 does not read conversation contents or store conversation IDs. The service worker

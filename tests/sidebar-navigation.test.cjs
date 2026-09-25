@@ -10,10 +10,21 @@ const ID = "11111111-2222-3333-4444-555555555555";
 const OTHER_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const ORIGIN = "https://chatgpt.com";
 const URL_VALUE = `${ORIGIN}/c/${ID}`;
+const PROJECT_ID = "g-p-0123456789abcdef0123456789abcdef";
+const PROJECT_URL = `${ORIGIN}/g/${PROJECT_ID}/project`;
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 // Sanitized structural fixture based on the live recent/project sidebar DOM
-// inspected on 2026-09-19. No private titles, IDs, or conversation text retained.
+// inspected on 2026-09-19, with project folders verified on 2026-09-23.
+// No private titles, IDs, or conversation text retained.
+const projectRow = (id) => `
+  <div class="sidebar-item" role="button" id="${id}"
+       data-app-action-sidebar-project-row="" data-app-action-sidebar-project-id="${PROJECT_ID}">
+    <span data-sidebar-project-container-id="project:${PROJECT_ID}"><svg id="${id}-icon"><path/></svg></span>
+    <span id="${id}-title">Test project</span>
+    <button id="${id}-menu" aria-label="Project actions"><svg><path/></svg></button>
+    <button id="${id}-new" aria-label="New chat in project"><svg><path/></svg></button>
+  </div>`;
 const row = (id = "recent") => `
   <div class="sidebar-item" role="button" id="${id}">
     <div class="contents"><button id="${id}-menu" aria-label="Chat actions"><svg><path/></svg></button>
@@ -23,10 +34,13 @@ const row = (id = "recent") => `
 const fixture = `<!doctype html><html><body>
   <aside><div id="app-shell-sidebar">
     <div data-sidebar-project-container-id="projects">
-      <div data-sidebar-project-container-id="project:g-p-example">
-        <div class="sidebar-item" role="button" id="project-heading">Project</div>
+      <div data-sidebar-project-container-id="project:${PROJECT_ID}">
+        ${projectRow("project-heading")}
         <div role="list" aria-label="Chats in Project"><div role="listitem">${row("project-chat")}</div></div>
       </div>
+    </div>
+    <div data-sidebar-project-container-id="pinned">
+      <div data-sidebar-project-container-id="project:${PROJECT_ID}">${projectRow("pinned-project")}</div>
     </div>
     <div data-sidebar-project-container-id="chats">
       <section><button id="recents-heading">Recents</button>
@@ -78,14 +92,72 @@ test("recent title and row resolve the exposed ID, never the title", () => {
   }
 });
 
-test("project rows, headings, gaps, native links and non-sidebar messages are excluded", () => {
+test("project conversations, section headings, gaps, native links and non-sidebar messages are excluded", () => {
   const h = pageHarness();
-  for (const id of ["project-chat", "project-heading", "recents-heading", "empty-space", "native-link", "outside-title", "recent-container", "main"]) {
+  for (const id of ["project-chat", "project-chat-title", "recents-heading", "empty-space", "native-link", "outside-title", "recent-container", "main"]) {
     assert.equal(h.site.getSidebarConversationLink(h.el(id)), null, id);
     assert.equal(h.event("mousedown", h.el(id)).defaultPrevented, false, id);
     h.event("auxclick", h.el(id));
   }
   assert.equal(h.sent.length, 0);
+});
+
+test("project and pinned folder rows, titles and icons open once on release", () => {
+  for (const prefix of ["project-heading", "pinned-project"]) {
+    for (const suffix of ["", "-title", "-icon"]) {
+      const h = pageHarness();
+      const target = h.el(prefix + suffix);
+      const link = h.site.getSidebarConversationLink(target);
+      assert.equal(link.element, h.el(prefix));
+      assert.equal(link.url, PROJECT_URL);
+      assert.equal(h.event("mousedown", target).defaultPrevented, true);
+      assert.equal(h.sent.length, 0);
+      assert.equal(h.event("auxclick", target).defaultPrevented, true);
+      h.event("auxclick", target);
+      assert.equal(h.sent.length, 1);
+      assert.equal(h.sent[0].url, PROJECT_URL);
+    }
+  }
+});
+
+test("project nested controls and their SVG children remain native", () => {
+  const h = pageHarness();
+  for (const target of h.el("project-heading").querySelectorAll("button, button *")) {
+    assert.equal(h.site.getSidebarConversationLink(target), null);
+    assert.equal(h.event("mousedown", target).defaultPrevented, false);
+    h.event("auxclick", target);
+  }
+  assert.equal(h.sent.length, 0);
+});
+
+test("project IDs must be valid and belong to an enabled sidebar folder row", () => {
+  const h = pageHarness();
+  const folder = h.el("project-heading");
+  for (const id of ["", "g-p-example", ID, `${PROJECT_ID}?x`, `${PROJECT_ID}/project`, "../settings"]) {
+    folder.setAttribute("data-app-action-sidebar-project-id", id);
+    assert.equal(h.site.getSidebarConversationLink(h.el("project-heading-title")), null, id);
+  }
+  folder.removeAttribute("data-app-action-sidebar-project-id");
+  assert.equal(h.site.getSidebarConversationLink(folder), null);
+  folder.setAttribute("data-app-action-sidebar-project-id", PROJECT_ID);
+  folder.setAttribute("aria-disabled", "true");
+  assert.equal(h.site.getSidebarConversationLink(folder), null);
+  folder.removeAttribute("aria-disabled");
+  folder.removeAttribute("data-app-action-sidebar-project-row");
+  assert.equal(h.site.getSidebarConversationLink(folder), null);
+  folder.setAttribute("data-app-action-sidebar-project-row", "");
+  h.el("main").appendChild(folder);
+  assert.equal(h.site.getSidebarConversationLink(folder), null);
+});
+
+test("project ID changes or release over a child conversation cancel opening", () => {
+  for (const cancel of ["id-change", "child-conversation"]) {
+    const h = pageHarness();
+    h.event("mousedown", h.el("project-heading-title"));
+    if (cancel === "id-change") h.el("project-heading").setAttribute("data-app-action-sidebar-project-id", "g-p-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    h.event("auxclick", h.el(cancel === "id-change" ? "project-heading-title" : "project-chat-title"));
+    assert.equal(h.sent.length, 0);
+  }
 });
 
 test("menu/pin controls, child SVGs, links and rename fields are excluded", () => {
@@ -128,12 +200,14 @@ test("mousedown blocks autoscroll; auxclick requests exactly one background tab"
 });
 
 test("left/right buttons, modifiers, synthetic and already-handled events remain native", () => {
-  for (const override of [{button:0}, {button:2}, {ctrlKey:true}, {metaKey:true}, {altKey:true}, {shiftKey:true}, {isTrusted:false}, {defaultPrevented:true}]) {
-    const h = pageHarness();
-    const down = h.event("mousedown", h.el("recent-title"), override);
-    h.event("auxclick", h.el("recent-title"), override);
-    assert.equal(!!down.stopped, false);
-    assert.equal(h.sent.length, 0);
+  for (const target of ["recent-title", "project-heading-title"]) {
+    for (const override of [{button:0}, {button:2}, {ctrlKey:true}, {metaKey:true}, {altKey:true}, {shiftKey:true}, {isTrusted:false}, {defaultPrevented:true}]) {
+      const h = pageHarness();
+      const down = h.event("mousedown", h.el(target), override);
+      h.event("auxclick", h.el(target), override);
+      assert.equal(!!down.stopped, false);
+      assert.equal(h.sent.length, 0);
+    }
   }
 });
 
@@ -192,9 +266,25 @@ function workerHarness(failCreation = false) {
 }
 
 test("worker opens inactive tab in the source window without changing the source", async () => {
+  for (const url of [URL_VALUE, PROJECT_URL]) {
+    const h = workerHarness();
+    assert.equal((await h.request(url)).ok, true);
+    assert.deepEqual(JSON.parse(JSON.stringify(h.created)), [{url,active:false,windowId:3,openerTabId:7}]);
+  }
+});
+
+test("worker rejects malformed project routes and unsafe project URLs", async () => {
   const h = workerHarness();
-  assert.equal((await h.request()).ok, true);
-  assert.deepEqual(JSON.parse(JSON.stringify(h.created)), [{url:URL_VALUE,active:false,windowId:3,openerTabId:7}]);
+  for (const url of [
+    `${PROJECT_URL}?x=1`, `${PROJECT_URL}#x`, `${PROJECT_URL}/`,
+    `${ORIGIN}/g/g-p-invalid/project`, `${ORIGIN}/g/${PROJECT_ID}/settings`,
+    `${ORIGIN}/g/${PROJECT_ID}/c/${ID}`, `${ORIGIN}/g/${PROJECT_ID}`,
+    `https://example.com/g/${PROJECT_ID}/project`,
+    `https://u:p@chatgpt.com/g/${PROJECT_ID}/project`,
+    `https://chatgpt.com:8443/g/${PROJECT_ID}/project`,
+    `http://chatgpt.com/g/${PROJECT_ID}/project`
+  ]) assert.equal((await h.request(url)).ok, false, url);
+  assert.equal(h.created.length, 0);
 });
 
 test("worker rejects unsafe URLs and invalid senders", async () => {
