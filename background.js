@@ -11,6 +11,13 @@ importScripts(
   "adapters/grok.js"
 );
 
+/**
+ * Handle only cdc:open-sidebar-tab requests from validated content scripts.
+ * Worker lifetime is independent of the popup; await its settings cache on
+ * startup and enforce master + middleClick even if the sender already checked.
+ * Respond with {ok:false} for invalid/disabled requests or tab-creation failures.
+ * Return true only when asynchronous processing must keep the channel open.
+ */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== "cdc:open-sidebar-tab") return;
 

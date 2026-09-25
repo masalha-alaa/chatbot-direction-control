@@ -1,7 +1,16 @@
 (() => {
   "use strict";
 
-  /** Generic composer keyboard-shortcut controller. */
+  /**
+   * Paragraph-level keyboard direction controller, gated by master + composer.
+   * Listeners remain registered for this page; each key event reads the settings
+   * cache so changes take effect immediately, including between press/release.
+   * Gemini has no composer setting and its native shortcuts remain untouched.
+   *
+   * Disabling the feature removes its CSS overrides, returning composed text
+   * to host styling. Paragraph choices stay in memory and are reapplied when
+   * re-enabled on this page; they are not persisted by Remember alignment.
+   */
 
   const extensionApi = globalThis.ChatDirectionControl;
   const site = extensionApi?.getCurrentSiteAdapter?.();
@@ -68,6 +77,11 @@
     return instanceId;
   }
 
+  /**
+   * Rebuild this page's external CSS from saved paragraph positions, or remove
+   * it when disabled. This deliberately changes existing text alignment too;
+   * disabling is not limited to ignoring future keyboard shortcuts.
+   */
   function rebuildParagraphStyles() {
     if (!enabled()) {
       document.getElementById(COMPOSER_STYLE_ID)?.remove();
@@ -96,6 +110,11 @@
     styleElement.textContent = rules.join("\n");
   }
 
+  /**
+   * Update the current or selected paragraphs without mutating managed text DOM.
+   * @param {HTMLElement} editor Active contenteditable composer.
+   * @param {"ltr"|"rtl"} direction
+   */
   function setParagraphDirection(editor, direction) {
     const paragraphs = site.getComposerTextBlocks(editor);
     const selectedParagraphs = getSelectedParagraphs(editor, paragraphs);
@@ -216,6 +235,9 @@
     true
   );
 
+  // Cancel any incomplete chord on a settings notification so releasing its
+  // keys cannot apply an old gesture after disable/re-enable. Keep paragraph
+  // choices and update their visible styles according to the effective setting.
   settings.subscribe(() => {
     pressedKeys.clear();
     pendingShortcut = null;

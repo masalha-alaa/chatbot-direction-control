@@ -6,6 +6,12 @@
    *
    * This file owns storage, buttons, persistence and DOM observation. It knows
    * nothing about chatbot-specific selectors; those live in adapter files.
+   *
+   * Settings changes apply live: disabling a role/master removes its controls
+   * and alignment overrides, while keeping cached choices and stored records.
+   * Remember alignment controls storage reads/writes, not current-page choices.
+   * The page cache survives host rerenders and role toggles but not a reload.
+   * Changing that preference does not erase old records or bulk-save the cache.
    */
 
   const extensionApi = globalThis.ChatDirectionControl;
@@ -131,6 +137,13 @@
     }
   }
 
+  /**
+   * Replace visible direction classes and run the adapter's optional correction.
+   * Passing null removes overrides and allows the adapter to restore punctuation.
+   * This function does not persist a preference; callers enforce role settings.
+   * @param {HTMLElement} message Adapter-provided message anchor.
+   * @param {"ltr"|"rtl"|null|undefined} mode
+   */
   function applyModeClasses(message, mode) {
     clearDirectionClasses(message);
 
@@ -167,6 +180,13 @@
     );
   }
 
+  /**
+   * Synchronize visible alignment, the message dataset, and button state only.
+   * pageModes/storage are deliberately separate so disabling a role can clear
+   * its displayed alignment without forgetting the user's choice.
+   * @param {HTMLElement} message
+   * @param {"ltr"|"rtl"|null} mode
+   */
   function setMode(message, mode) {
     applyModeClasses(message, mode);
 
@@ -218,6 +238,8 @@
       button.innerHTML = alignmentIcon("left");
     }
 
+    // Recheck the role at click time in case settings changed after insertion.
+    // Cache the choice before storage I/O so an older load cannot overwrite it.
     button.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -271,6 +293,13 @@
     attemptedActionBarRetries.delete(message);
   }
 
+  /**
+   * Reconcile one message with live role/master settings. Disabled roles lose
+   * controls and visible overrides; enabled roles get controls once the native
+   * action bar exists. Recycled anchors are reset when their storage key changes.
+   * @param {HTMLElement} message
+   * @returns {Promise<void>}
+   */
   async function injectToolbar(message) {
     if (!(message instanceof HTMLElement)) return;
 
@@ -328,6 +357,16 @@
     restoreMode(message, key);
   }
 
+  /**
+   * Prefer this page's choice; otherwise read storage only when remembering is
+   * enabled. null in pageModes is an intentional/default mode, not a cache miss.
+   * Revision/request checks discard superseded reads; role, conversation and
+   * cache checks prevent late results from undoing a click or settings change.
+   * A replaced message schedules a scan so its successor gets the loaded mode.
+   * @param {HTMLElement} message
+   * @param {string} key Origin + conversation path + stable message identity.
+   * @returns {Promise<void>}
+   */
   async function restoreMode(message, key) {
     if (pageModes.has(key)) {
       setMode(message, pageModes.get(key));
@@ -362,6 +401,8 @@
     scheduledScan = setTimeout(scanMessages, MUTATION_DEBOUNCE_MS);
   }
 
+  // Reconcile immediately on settings notifications, independent of whether
+  // the popup remains open. Invalidating pending reads prevents stale recovery.
   settings.subscribe(() => {
     settingsRevision += 1;
     pendingLoads.clear();

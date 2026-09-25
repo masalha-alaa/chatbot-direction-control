@@ -1,6 +1,11 @@
 (() => {
   "use strict";
 
+  /**
+   * Popup view of shared extension preferences. This document exists only while
+   * the popup is open; saved values and page/worker listeners live independently.
+   * Read raw values for checkbox state, then render effective UI dependencies.
+   */
   const settings = globalThis.ChatDirectionSettings;
   const PUNCTUATION_HELP =
     "Fix misplaced punctuation in messages set to right-to-left alignment";
@@ -17,6 +22,7 @@
   document.getElementById("extension-version").textContent =
     `v${chrome.runtime.getManifest().version}`;
 
+  /** Apply master/dependency disabling, effective counts and save status. */
   function render() {
     popup.classList.toggle("paused", !master.checked);
     for (const input of controls) input.disabled = !master.checked;
@@ -44,6 +50,7 @@
     status.closest("footer").hidden = storageAvailable;
   }
 
+  /** Restore checkbox values from the shared cache, including hidden choices. */
   function restore() {
     master.checked = settings.get("enabled");
     for (const input of controls) {
@@ -52,6 +59,12 @@
     render();
   }
 
+  /**
+   * Persist one changed checkbox; on failure restore cached state and show an
+   * error. Each input's data-site/data-key maps directly to a settings API name.
+   * @param {Event} event Checkbox change event.
+   * @returns {Promise<void>}
+   */
   async function save(event) {
     const input = event.target;
     const name = input === master ? "enabled" : `${input.dataset.site}.${input.dataset.key}`;
