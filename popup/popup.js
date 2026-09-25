@@ -1,9 +1,7 @@
 (() => {
   "use strict";
 
-  // UI-only prototype state. Content scripts do not read this key, and this
-  // popup never writes chrome.storage or sends messages to a chatbot tab.
-  const PREVIEW_STORAGE_KEY = "cdc:popup-ui-preview:v1";
+  const settings = globalThis.ChatDirectionSettings;
   const PUNCTUATION_HELP =
     "Fix misplaced punctuation in messages set to right-to-left alignment";
   const popup = document.querySelector(".popup");
@@ -18,22 +16,6 @@
 
   document.getElementById("extension-version").textContent =
     `v${chrome.runtime.getManifest().version}`;
-
-  function restorePreview() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(PREVIEW_STORAGE_KEY));
-      if (!saved || typeof saved !== "object") return;
-      if (typeof saved.enabled === "boolean") master.checked = saved.enabled;
-
-      for (const input of controls) {
-        const value = saved.sites?.[input.dataset.site]?.[input.dataset.key];
-        if (typeof value === "boolean") input.checked = value;
-      }
-    } catch {
-      // Keep the defaults usable if stored preview data cannot be read.
-      storageAvailable = false;
-    }
-  }
 
   function render() {
     popup.classList.toggle("paused", !master.checked);
@@ -62,27 +44,34 @@
     status.closest("footer").hidden = storageAvailable;
   }
 
-  function savePreview() {
-    const sites = {};
+  function restore() {
+    master.checked = settings.get("enabled");
     for (const input of controls) {
-      const { site, key } = input.dataset;
-      (sites[site] ??= {})[key] = input.checked;
-    }
-
-    try {
-      localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({
-        enabled: master.checked,
-        sites
-      }));
-      storageAvailable = true;
-    } catch {
-      storageAvailable = false;
+      input.checked = settings.get(`${input.dataset.site}.${input.dataset.key}`);
     }
     render();
   }
 
-  master.addEventListener("change", savePreview);
-  for (const input of controls) input.addEventListener("change", savePreview);
-  restorePreview();
-  render();
+  async function save(event) {
+    const input = event.target;
+    const name = input === master ? "enabled" : `${input.dataset.site}.${input.dataset.key}`;
+    try {
+      await settings.set(name, input.checked);
+      storageAvailable = true;
+    } catch {
+      storageAvailable = false;
+    }
+    restore();
+  }
+
+  master.disabled = true;
+  for (const input of controls) input.disabled = true;
+  master.addEventListener("change", save);
+  for (const input of controls) input.addEventListener("change", save);
+  settings.ready.then(() => {
+    storageAvailable = !settings.error;
+    master.disabled = false;
+    restore();
+    settings.subscribe(restore);
+  });
 })();
