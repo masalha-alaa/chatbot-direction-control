@@ -135,6 +135,15 @@
     target.classList.add(DIRECTION_TARGET_CLASS);
     if (mode === DIRECTION_RTL) target.classList.add(RTL_CLASS);
     if (mode === DIRECTION_LTR) target.classList.add(LTR_CLASS);
+
+    // Adapters may optionally correct host-specific bidi markup after the
+    // generic direction classes are applied.
+    site.onDirectionModeApplied?.({
+      message,
+      role,
+      target,
+      mode
+    });
   }
 
   function findToolbar(message) {
