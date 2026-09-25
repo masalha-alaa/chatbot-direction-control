@@ -135,6 +135,19 @@ figure { margin: 0; overflow: hidden; }
 figure img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #050608; }
 figcaption { padding: 13px 16px; border-top: 1px solid var(--border); color: var(--muted); font-weight: 650; }
 
+.settings-showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+  align-items: center;
+  gap: 64px;
+}
+.settings-copy p { max-width: 560px; margin: 22px 0 0; color: var(--muted); }
+.settings-screenshot { width: 100%; max-width: 400px; justify-self: center; }
+.settings-screenshot img { aspect-ratio: auto; height: auto; object-fit: contain; }
+.settings-screenshot a { display: block; }
+.settings-screenshot a:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.settings-screenshot figcaption { font-size: .85rem; text-align: center; }
+
 .privacy-callout {
   margin-top: 64px;
   margin-bottom: 86px;
@@ -165,6 +178,7 @@ footer { border-top: 1px solid var(--border); color: var(--muted); }
   .hero-art { order: -1; }
   .hero-art img { width: 220px; }
   .feature-grid, .shot-grid { grid-template-columns: 1fr; }
+  .settings-showcase { grid-template-columns: 1fr; gap: 32px; }
   .section { padding: 64px 0; }
   .privacy-callout { align-items: flex-start; flex-direction: column; }
 }
