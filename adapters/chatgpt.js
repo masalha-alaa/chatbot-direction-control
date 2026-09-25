@@ -16,6 +16,13 @@
   const ASSISTANT_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy"]';
   const TURN_KEY_SELECTOR = "[data-turn-key]";
 
+  // Feature flag for ChatGPT's RTL <bdi> trailing-punctuation correction.
+  // Keep this as one switch so a future settings control can replace it.
+  const ENABLE_RTL_BDI_PUNCTUATION_FIX = true;
+  const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
+  const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
+  const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
+
   // ChatGPT may wrap one native action button in an extra child container.
   const SINGLE_BUTTON_WRAPPER_MAX_BUTTONS = 1;
 
@@ -43,6 +50,68 @@
     }
 
     return null;
+  }
+
+  function getLastTextNode(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let lastTextNode = null;
+
+    for (
+      let textNode = walker.nextNode();
+      textNode;
+      textNode = walker.nextNode()
+    ) {
+      lastTextNode = textNode;
+    }
+
+    return lastTextNode;
+  }
+
+  function restoreRtlBdiPunctuation(target) {
+    target
+      .querySelectorAll(`span[${BDI_PUNCTUATION_HELPER_ATTRIBUTE}]`)
+      .forEach((helper) => {
+        const bdi = helper.previousSibling;
+        if (!(bdi instanceof HTMLElement) || bdi.tagName !== "BDI") return;
+
+        const lastTextNode = getLastTextNode(bdi);
+        if (!lastTextNode) return;
+
+        lastTextNode.data += helper.textContent || "";
+        helper.remove();
+      });
+  }
+
+  function applyRtlBdiPunctuation(target) {
+    for (const bdi of target.querySelectorAll("bdi")) {
+      if (!(bdi instanceof HTMLElement)) continue;
+      if (bdi.closest(NON_PROSE_BDI_ANCESTOR_SELECTOR)) continue;
+
+      const nextSibling = bdi.nextSibling;
+      if (
+        nextSibling instanceof HTMLElement &&
+        nextSibling.hasAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE)
+      ) {
+        continue;
+      }
+
+      const lastTextNode = getLastTextNode(bdi);
+      if (!lastTextNode) continue;
+
+      const match = lastTextNode.data.match(BDI_TRAILING_PUNCTUATION_RE);
+      if (!match) continue;
+
+      const punctuation = match[0];
+      const remainingText = bdi.textContent.slice(0, -punctuation.length);
+      if (!remainingText.trim()) continue;
+
+      lastTextNode.data = lastTextNode.data.slice(0, -punctuation.length);
+
+      const helper = document.createElement("span");
+      helper.setAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE, "");
+      helper.textContent = punctuation;
+      bdi.after(helper);
+    }
   }
 
   api.registerAdapter({
@@ -180,6 +249,17 @@
         ".markdown",
         '[class*="markdown"]'
       ]) || message;
+    },
+
+    onDirectionModeApplied({ target, mode }) {
+      if (!(target instanceof HTMLElement)) return;
+
+      if (!ENABLE_RTL_BDI_PUNCTUATION_FIX || mode !== "rtl") {
+        restoreRtlBdiPunctuation(target);
+        return;
+      }
+
+      applyRtlBdiPunctuation(target);
     }
   });
 })();
