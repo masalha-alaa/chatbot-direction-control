@@ -28,7 +28,6 @@
 
   // Feature flag for ChatGPT's RTL <bdi> trailing-punctuation correction.
   // Keep this as one switch so a future settings control can replace it.
-  const ENABLE_RTL_BDI_PUNCTUATION_FIX = true;
   const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
   const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
   const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
@@ -307,10 +306,10 @@
       ]) || message;
     },
 
-    onDirectionModeApplied({ target, mode }) {
+    onDirectionModeApplied({ target, mode, punctuationEnabled = false }) {
       if (!(target instanceof HTMLElement)) return;
 
-      if (!ENABLE_RTL_BDI_PUNCTUATION_FIX || mode !== "rtl") {
+      if (!punctuationEnabled || mode !== "rtl") {
         restoreRtlBdiPunctuation(target);
         return;
       }
