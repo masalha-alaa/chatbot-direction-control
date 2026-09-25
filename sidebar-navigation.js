@@ -1,7 +1,12 @@
 (() => {
   "use strict";
 
-  /** Generic, opt-in middle-click handling; all site selectors live in adapters. */
+  /**
+   * Opt-in middle-click handling; all site selectors live in adapters.
+   * Permanent page listeners check cached master + middleClick settings on both
+   * press and release. Disabled events retain their normal browser behavior.
+   * The worker independently checks its settings before actually opening a tab.
+   */
   const site = globalThis.ChatDirectionControl?.getCurrentSiteAdapter();
   if (typeof site?.getSidebarConversationLink !== "function" ||
       typeof site?.isSidebarConversationUrl !== "function") return;
@@ -10,6 +15,7 @@
   const enabled = () => settings.enabled(site.id, "middleClick");
   const MIDDLE_BUTTON = 1;
   let pressedLink = null;
+  // A preference change cancels a press, even if re-enabled before release.
   settings.subscribe(() => { pressedLink = null; });
 
   function isPlainMiddleClick(event) {
