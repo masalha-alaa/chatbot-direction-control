@@ -20,6 +20,30 @@ Useful if you regularly switch between languages such as English, Arabic, and He
 The extension works entirely on your computer. It does not collect, send, upload, or
 share your messages, settings, or any other data with external servers.
 
+Settings popup preview
+----------------------
+
+Click the extension's toolbar icon to open the dark settings popup. This branch
+contains the UI only: switches, chatbot sections, counts, and dependent controls
+work inside the popup, but do not change any chatbot behavior. The master switch
+also affects only the popup in this preview.
+
+Preview choices persist separately in extension-page localStorage under
+`cdc:popup-ui-preview:v1`. They do not modify saved message alignments or write
+to `chrome.storage`. The displayed version comes from the installed manifest.
+
+Each chatbot starts with Remember alignment. Gemini has no Message box control.
+ChatGPT additionally shows Fix RTL punctuation above Mouse middle click; the
+punctuation switch is disabled when both alignment-button switches are off,
+while preserving its selected value. The underlying punctuation and middle-click
+features are not included or activated by this UI branch.
+
+To review: reload the unpacked extension, click its toolbar icon, try the
+switches and chatbot sections, then close and reopen the popup to check saved
+choices. Turn off both ChatGPT alignment-button switches to check the punctuation
+dependency. Existing chatbot controls should continue working regardless of the
+popup switch positions.
+
 Composer shortcut behavior
 --------------------------
 
