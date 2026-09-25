@@ -57,8 +57,9 @@
     }
 
     status.textContent = storageAvailable
-      ? "UI preview · Changes affect this popup only"
-      : "UI preview · Choices could not be saved";
+      ? ""
+      : "Choices could not be saved";
+    status.closest("footer").hidden = storageAvailable;
   }
 
   function savePreview() {
