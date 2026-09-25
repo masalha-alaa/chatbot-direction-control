@@ -26,8 +26,7 @@
   const PROJECT_ID_REGEXP = new RegExp(`^${PROJECT_ID_PATTERN}$`, "i");
   const PROJECT_PATH_PATTERN = new RegExp(`^/g/${PROJECT_ID_PATTERN}/project$`, "i");
 
-  // Feature flag for ChatGPT's RTL <bdi> trailing-punctuation correction.
-  // Keep this as one switch so a future settings control can replace it.
+  // Markup used by the optional RTL <bdi> trailing-punctuation correction.
   const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
   const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
   const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
