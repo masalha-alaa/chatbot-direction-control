@@ -15,6 +15,21 @@
   const USER_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy message"]';
   const ASSISTANT_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy"]';
   const TURN_KEY_SELECTOR = "[data-turn-key]";
+  const SIDEBAR_CONVERSATION_KEY_ATTRIBUTE = "data-sidebar-chatgpt-conversation-key";
+  const CONVERSATION_ID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  const SIDEBAR_CONVERSATION_KEY_PATTERN = new RegExp(
+    `^chatgpt:conversation:(${CONVERSATION_ID_PATTERN})$`, "i"
+  );
+  const CONVERSATION_PATH_PATTERN = new RegExp(`^/c/${CONVERSATION_ID_PATTERN}$`, "i");
+  const SIDEBAR_PROJECT_ID_ATTRIBUTE = "data-app-action-sidebar-project-id";
+  const PROJECT_ID_PATTERN = "g-p-[0-9a-f]{32}";
+  const PROJECT_ID_REGEXP = new RegExp(`^${PROJECT_ID_PATTERN}$`, "i");
+  const PROJECT_PATH_PATTERN = new RegExp(`^/g/${PROJECT_ID_PATTERN}/project$`, "i");
+
+  // Markup used by the optional RTL <bdi> trailing-punctuation correction.
+  const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
+  const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
+  const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
 
   // ChatGPT may wrap one native action button in an extra child container.
   const SINGLE_BUTTON_WRAPPER_MAX_BUTTONS = 1;
@@ -45,11 +60,119 @@
     return null;
   }
 
+  function getLastTextNode(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let lastTextNode = null;
+
+    for (
+      let textNode = walker.nextNode();
+      textNode;
+      textNode = walker.nextNode()
+    ) {
+      lastTextNode = textNode;
+    }
+
+    return lastTextNode;
+  }
+
+  function restoreRtlBdiPunctuation(target) {
+    target
+      .querySelectorAll(`span[${BDI_PUNCTUATION_HELPER_ATTRIBUTE}]`)
+      .forEach((helper) => {
+        const bdi = helper.previousSibling;
+        if (!(bdi instanceof HTMLElement) || bdi.tagName !== "BDI") return;
+
+        const lastTextNode = getLastTextNode(bdi);
+        if (!lastTextNode) return;
+
+        lastTextNode.data += helper.textContent || "";
+        helper.remove();
+      });
+  }
+
+  function applyRtlBdiPunctuation(target) {
+    for (const bdi of target.querySelectorAll("bdi")) {
+      if (!(bdi instanceof HTMLElement)) continue;
+      if (bdi.closest(NON_PROSE_BDI_ANCESTOR_SELECTOR)) continue;
+
+      const nextSibling = bdi.nextSibling;
+      if (
+        nextSibling instanceof HTMLElement &&
+        nextSibling.hasAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE)
+      ) {
+        continue;
+      }
+
+      const lastTextNode = getLastTextNode(bdi);
+      if (!lastTextNode) continue;
+
+      const match = lastTextNode.data.match(BDI_TRAILING_PUNCTUATION_RE);
+      if (!match) continue;
+
+      const punctuation = match[0];
+      const remainingText = bdi.textContent.slice(0, -punctuation.length);
+      if (!remainingText.trim()) continue;
+
+      lastTextNode.data = lastTextNode.data.slice(0, -punctuation.length);
+
+      const helper = document.createElement("span");
+      helper.setAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE, "");
+      helper.textContent = punctuation;
+      bdi.after(helper);
+    }
+  }
+
   api.registerAdapter({
     id: "chatgpt",
 
     matches(pageLocation) {
       return pageLocation.hostname === "chatgpt.com";
+    },
+
+    /**
+     * Recent chats expose a conversation key on their surrounding list item;
+     * project folders expose a project ID directly on their row. Conversations
+     * inside projects still lack an exposed ID and remain unsupported.
+     * This hook is queried only on mouse events, with no observers or polling.
+     */
+    getSidebarConversationLink(target) {
+      if (!(target instanceof Element)) return null;
+      const row = target.closest('.sidebar-item[role="button"]');
+      if (!row?.closest("#app-shell-sidebar")) return null;
+
+      // Menu, pin, rename inputs, and any other nested controls retain their
+      // native behavior, even when the pointer is over their child SVG/text.
+      const control = target.closest(
+        'button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="menuitem"]'
+      );
+      if (control !== row || row.getAttribute("aria-disabled") === "true") return null;
+
+      // Live project-folder DOM verified on 2026-09-23. Read the ID only from
+      // the folder row, never an ancestor of a nested project conversation.
+      if (row.hasAttribute("data-app-action-sidebar-project-row")) {
+        const projectId = row.getAttribute(SIDEBAR_PROJECT_ID_ATTRIBUTE);
+        if (!PROJECT_ID_REGEXP.test(projectId || "")) return null;
+        return { element: row, url: new URL(`/g/${projectId}/project`, location.origin).href };
+      }
+
+      if (row.closest("[data-sidebar-project-container-id]")
+        ?.getAttribute("data-sidebar-project-container-id") !== "chats") return null;
+      if (!row.querySelector("[data-thread-title]")) return null;
+
+      const key = row.closest(`[${SIDEBAR_CONVERSATION_KEY_ATTRIBUTE}]`)
+        ?.getAttribute(SIDEBAR_CONVERSATION_KEY_ATTRIBUTE);
+      const match = SIDEBAR_CONVERSATION_KEY_PATTERN.exec(key || "");
+      if (!match) return null;
+      return { element: row, url: new URL(`/c/${match[1]}`, location.origin).href };
+    },
+
+    // Pure URL policy also used by the service worker. Never let a page-supplied
+    // message turn this feature into an arbitrary-URL tab opener.
+    isSidebarConversationUrl(url) {
+      return url.protocol === "https:" &&
+        url.hostname === "chatgpt.com" &&
+        !url.port && !url.username && !url.password && !url.search && !url.hash &&
+        (CONVERSATION_PATH_PATTERN.test(url.pathname) || PROJECT_PATH_PATTERN.test(url.pathname));
     },
 
     findComposerEditor(activeElement) {
@@ -180,6 +303,24 @@
         ".markdown",
         '[class*="markdown"]'
       ]) || message;
+    },
+
+    /**
+     * Opt-in correction for trailing punctuation isolated inside ChatGPT BDI.
+     * The controller supplies the effective setting and role-approved mode.
+     * Disabling the setting or leaving RTL restores previously moved text.
+     * @param {{target: HTMLElement, mode: string|null,
+     *   punctuationEnabled?: boolean}} options
+     */
+    onDirectionModeApplied({ target, mode, punctuationEnabled = false }) {
+      if (!(target instanceof HTMLElement)) return;
+
+      if (!punctuationEnabled || mode !== "rtl") {
+        restoreRtlBdiPunctuation(target);
+        return;
+      }
+
+      applyRtlBdiPunctuation(target);
     }
   });
 })();
