@@ -9,7 +9,7 @@ const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const run = (context, file) => vm.runInContext(read(file), context, { filename: file });
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 function settingsContext(store, extra = {}) {
-  const context = vm.createContext({ console, ...extra, chrome: { storage: store.storage, runtime: { getManifest: () => ({ version: "1.0.7" }) } } });
+  const context = vm.createContext({ console, ...extra, chrome: { storage: store.storage, runtime: { getManifest: () => ({ version: "1.1.0" }) } } });
   run(context, "settings.js");
   return context;
 }
@@ -71,7 +71,7 @@ test("popup uses real settings, keeps dependencies and reports failed saves", as
   }
   assert.equal(input("chatgpt-rtlPunctuation").disabled, true);
   assert.equal(store.data["cdc:settings:chatgpt.user"], false);
-  assert.equal(document.getElementById("extension-version").textContent, "v1.0.7");
+  assert.equal(document.getElementById("extension-version").textContent, "v1.1.0");
   store.setFailure(true);
   input("enabled").checked = false;
   input("enabled").dispatchEvent(new Event("change"));
