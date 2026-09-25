@@ -24,6 +24,7 @@
         "https://grok.com/*"
       ],
       "js": [
+        "settings.js",
         "site-adapter-registry.js",
         "adapters/chatgpt.js",
         "adapters/gemini.js",
