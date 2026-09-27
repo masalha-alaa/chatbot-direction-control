@@ -13,6 +13,9 @@
   // fallback search so it cannot climb into unrelated conversation UI.
   const MAX_ACTION_BAR_ANCESTORS = 4;
   const MIN_ACTION_BUTTONS = 2;
+  const MESSAGE_SELECTOR =
+    'user-query, model-response, .user-query, [data-message-author="user"], ' +
+    '.model-response-container, [data-message-author="assistant"]';
 
   // Shared CSS recognizes this adapter-controlled visibility policy. Applying
   // it to the whole user turn makes our toolbar appear at the same time as
@@ -20,15 +23,15 @@
   const TOOLBAR_VISIBILITY_ATTRIBUTE = "data-cdc-toolbar-visibility";
   const TOOLBAR_VISIBILITY_HOVER = "hover";
 
-  function actionBarFromButton(button) {
-    if (!(button instanceof HTMLElement)) return null;
+  function actionBarFromButton(button, turn) {
+    if (!(button instanceof HTMLElement) || !turn?.contains(button)) return null;
 
     let candidate = button.parentElement;
-    let fallback = candidate;
+    let fallback = null;
 
     for (
       let level = 0;
-      candidate && level < MAX_ACTION_BAR_ANCESTORS;
+      candidate && turn.contains(candidate) && level < MAX_ACTION_BAR_ANCESTORS;
       level += 1
     ) {
       if (candidate.querySelectorAll("button").length >= MIN_ACTION_BUTTONS) {
@@ -102,11 +105,17 @@
     },
 
     getTurn(message) {
-      return (
+      const turn = (
         message.closest("user-query, model-response") ||
         message.closest(".user-query-container, .model-response-container, .response-container") ||
         message
       );
+      // Fallback wrappers can contain an entire exchange. Only use a wrapper
+      // whose other message matches are ancestors/descendants of this message.
+      const hasOtherMessage = [...turn.querySelectorAll(MESSAGE_SELECTOR)].some(
+        candidate => candidate !== message && !message.contains(candidate) && !candidate.contains(message)
+      );
+      return hasOtherMessage ? message : turn;
     },
 
     getMessageStorageId(message) {
@@ -141,7 +150,7 @@
         );
         const copyButton = copyIcon?.closest?.("button");
 
-        const exact = actionBarFromButton(editButton || copyButton);
+        const exact = actionBarFromButton(editButton || copyButton, turn);
         if (exact) return useNativeUserActionVisibility(turn, exact);
       }
 
@@ -157,10 +166,13 @@
       ]);
       if (!actionButton) return null;
 
-      const actionBar =
-        actionButton.closest(
-          ".buttons-container-v2, .buttons-container, .response-actions, .actions-container, [class*='action-buttons'], [class*='buttons-container']"
-        ) || actionBarFromButton(actionButton);
+      const namedBar = actionButton.closest(
+        ".buttons-container-v2, .buttons-container, .response-actions, .actions-container, [class*='action-buttons'], [class*='buttons-container']"
+      );
+      // closest() and button-count fallbacks must stay inside this turn even
+      // when it has only one native button; a depth limit alone is insufficient.
+      const actionBar = namedBar && turn.contains(namedBar)
+        ? namedBar : actionBarFromButton(actionButton, turn);
 
       return role === ROLE_USER
         ? useNativeUserActionVisibility(turn, actionBar)
