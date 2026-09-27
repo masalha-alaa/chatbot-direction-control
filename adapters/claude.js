@@ -16,6 +16,12 @@
   const USER_MESSAGE_SELECTOR = '[data-testid="user-message"]';
   const ASSISTANT_MESSAGE_SELECTOR = ".standard-markdown";
   const THINKING_CONTAINER_SELECTOR = "[data-timeline-text]";
+  const MESSAGE_SELECTOR = [
+    USER_MESSAGE_SELECTOR, ASSISTANT_MESSAGE_SELECTOR,
+    '[data-testid="human-message"]', '.font-user-message', '[data-testid="message-human"]', '.user-message',
+    '[data-testid="assistant-message"]', '[data-testid="ai-message"]', '.font-claude-response',
+    '.font-claude-message', '[data-testid="message-assistant"]', '.assistant-message'
+  ].join(",");
 
   const CLAUDE_ACTION_BAR_SELECTOR = [
     'div[role="group"][aria-label="Message actions"]',
@@ -58,18 +64,18 @@
     );
   }
 
-  function actionBarFromButton(button) {
-    if (!(button instanceof HTMLElement) || isInsideCodeBlock(button)) return null;
+  function actionBarFromButton(button, turn) {
+    if (!(button instanceof HTMLElement) || !turn?.contains(button) || isInsideCodeBlock(button)) return null;
 
     const semanticBar = button.closest(CLAUDE_ACTION_BAR_SELECTOR);
-    if (semanticBar) return semanticBar;
+    if (semanticBar && turn.contains(semanticBar)) return semanticBar;
 
     let candidate = button.parentElement;
-    let fallback = candidate;
+    let fallback = null;
 
     for (
       let level = 0;
-      candidate && level < MAX_ACTION_BAR_ANCESTORS;
+      candidate && turn.contains(candidate) && level < MAX_ACTION_BAR_ANCESTORS;
       level += 1
     ) {
       if (isInsideCodeBlock(candidate)) return null;
@@ -194,12 +200,19 @@
     },
 
     getTurn(message) {
-      return (
+      const turn = (
         message.closest(TURN_ROW_SELECTOR) ||
         message.closest('[data-test-render-count], [data-is-streaming]') ||
         message.parentElement ||
         message
       );
+      // Do not let a shared row/parent attach two messages to the same native
+      // controls. When ownership is ambiguous, stay on the content itself.
+      const hasOtherMessage = [...turn.querySelectorAll(MESSAGE_SELECTOR)].some(
+        candidate => candidate !== message && !message.contains(candidate) &&
+          !candidate.contains(message) && !candidate.closest(THINKING_CONTAINER_SELECTOR)
+      );
+      return hasOtherMessage ? message : turn;
     },
 
     // Claude exposes no message-id attribute. Its virtualized row index is the
@@ -222,7 +235,7 @@
           '[data-testid="action-bar-edit"]',
           'button[aria-label*="Edit" i]'
         ]);
-        const userBar = actionBarFromButton(editButton);
+        const userBar = actionBarFromButton(editButton, turn);
         if (userBar) return useNativeUserActionVisibility(turn, userBar);
       }
 
@@ -236,7 +249,8 @@
         'button[aria-label*="Copy" i]',
         'button[aria-label*="Retry" i]'
       ]);
-      const actionBar = actionBarFromButton(actionButton);
+      // Bound the fallback by the owning turn, not just an ancestor count.
+      const actionBar = actionBarFromButton(actionButton, turn);
       if (!actionBar) return null;
 
       return role === ROLE_USER
