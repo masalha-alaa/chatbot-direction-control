@@ -15,6 +15,11 @@
   const USER_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy message"]';
   const ASSISTANT_COPY_BUTTON_SELECTOR = 'button[aria-label="Copy"]';
   const TURN_KEY_SELECTOR = "[data-turn-key]";
+  const USER_CONTENT_SELECTOR =
+    '[data-markdown-text-tone="user-message"], [data-user-message-bubble], ' +
+    '[data-message-author-role="user"], [class~="group/user-message"], .rich-text-user-turn';
+  const ASSISTANT_CONTENT_SELECTOR =
+    '[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]';
   const SIDEBAR_CONVERSATION_KEY_ATTRIBUTE = "data-sidebar-chatgpt-conversation-key";
   const CONVERSATION_ID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
   const SIDEBAR_CONVERSATION_KEY_PATTERN = new RegExp(
@@ -47,14 +52,41 @@
     )];
   }
 
-  function findClosestAncestorTarget(element, selectors) {
+  function findClosestAncestorTarget(element, selectors, role) {
+    // A current ChatGPT turn can contain BOTH roles. The assistant action bar
+    // sits outside its text container, so an unfiltered query in the shared
+    // ancestor selects the user's MarkdownRoot first. Filter every candidate
+    // by its content owner, including fallback Markdown/whitespace selectors.
+    const oppositeRoleSelector = role === ROLE_ASSISTANT
+      ? USER_CONTENT_SELECTOR
+      : ASSISTANT_CONTENT_SELECTOR;
+    const boundary = element.closest(TURN_KEY_SELECTOR) ||
+      element.closest("[data-content-search-turn-key]") || element.closest("article");
+
     for (
       let ancestor = element?.parentElement;
       ancestor && ancestor !== document.documentElement;
       ancestor = ancestor.parentElement
     ) {
-      const target = firstElement(ancestor, selectors);
-      if (target) return target;
+      // Without a turn marker, stop before a shared conversation ancestor can
+      // associate a missing/unmounted message with another reply's content.
+      if (!boundary) {
+        const copySelector = role === ROLE_USER
+          ? USER_COPY_BUTTON_SELECTOR : ASSISTANT_COPY_BUTTON_SELECTOR;
+        const bars = new Set([...ancestor.querySelectorAll(`${ACTION_BAR_SELECTOR} ${copySelector}`)]
+          .map(button => button.closest(ACTION_BAR_SELECTOR)));
+        if (bars.size > 1) return null;
+      }
+
+      for (const selector of selectors) {
+        for (const target of ancestor.querySelectorAll(selector)) {
+          if (!(target instanceof HTMLElement) || target.closest(oppositeRoleSelector)) continue;
+          if (boundary && !boundary.contains(target)) continue;
+          if (boundary && target.closest(TURN_KEY_SELECTOR) !== element.closest(TURN_KEY_SELECTOR)) continue;
+          return target;
+        }
+      }
+      if (ancestor === boundary) break;
     }
 
     return null;
@@ -278,15 +310,17 @@
         if (role === ROLE_USER) {
           return findClosestAncestorTarget(message, [
             ".whitespace-pre-wrap",
-            '[class*="whitespace-pre-wrap"]'
-          ]);
+            '[class*="whitespace-pre-wrap"]',
+            '[data-markdown-text-tone="user-message"]'
+          ], role);
         }
 
         return findClosestAncestorTarget(message, [
+          '[data-markdown-text-style="assistant-message"]',
           '[class*="MarkdownRoot"]',
           ".markdown",
           '[class*="markdown"]'
-        ]);
+        ], role);
       }
 
       if (role === ROLE_USER) {
