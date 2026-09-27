@@ -25,7 +25,7 @@ test("all supported defaults, independent writes, reload and cross-context updat
     assert.equal(a.enabled(site, "composer"), site !== "gemini");
   }
   assert.equal(a.enabled("chatgpt", "middleClick"), false);
-  assert.equal(a.enabled("chatgpt", "rtlPunctuation"), false);
+  assert.equal(a.enabled("chatgpt", "rtlPunctuation"), true);
   await Promise.all([a.set("chatgpt.middleClick", true), b.set("claude.user", false)]);
   assert.equal(b.enabled("chatgpt", "middleClick"), true);
   assert.equal(a.enabled("claude", "user"), false);
@@ -62,7 +62,7 @@ test("popup uses real settings, keeps dependencies and reports failed saves", as
   await flush();
   const input = id => document.getElementById(id);
   assert.equal(input("chatgpt-middleClick").checked, false);
-  assert.equal(input("chatgpt-rtlPunctuation").checked, false);
+  assert.equal(input("chatgpt-rtlPunctuation").checked, true);
   assert.equal(input("gemini-composer"), null);
   for (const id of ["chatgpt-user", "chatgpt-assistant"]) {
     input(id).checked = false;
@@ -186,8 +186,8 @@ for (const siteId of ["chatgpt", "claude", "grok", "gemini"]) {
   });
 }
 
-test("actual ChatGPT punctuation hook is opt-in and restores text on disable", async () => {
-  const h = pageContext("chatgpt", storageHarness());
+test("actual ChatGPT punctuation hook respects a saved opt-out and restores text on disable", async () => {
+  const h = pageContext("chatgpt", storageHarness({ "cdc:settings:chatgpt.rtlPunctuation": false }));
   let adapter;
   h.context.ChatDirectionControl = { dom: {}, registerAdapter: value => { adapter = value; } };
   run(h.context, "adapters/chatgpt.js");

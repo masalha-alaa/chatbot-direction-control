@@ -45,7 +45,7 @@ chatbot tabs once so they load the updated content scripts.
   in new background tabs. Both the content script and background worker enforce
   this preference and the master switch.
 
-Middle-click tabs and RTL punctuation default to **off**. Every other setting
+Middle-click tabs default to **off**. Every other setting, including RTL punctuation,
 starts **on**. Settings are stored as independent `cdc:settings:` keys, separate
 from existing `cgpt-direction|` alignment records. UI prototype preferences are
 not imported. The displayed extension version comes from the manifest.

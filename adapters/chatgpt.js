@@ -340,7 +340,7 @@
     },
 
     /**
-     * Opt-in correction for trailing punctuation isolated inside ChatGPT BDI.
+     * Optional correction for trailing punctuation isolated inside ChatGPT BDI.
      * The controller supplies the effective setting and role-approved mode.
      * Disabling the setting or leaving RTL restores previously moved text.
      * @param {{target: HTMLElement, mode: string|null,

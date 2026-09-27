@@ -24,7 +24,7 @@
   const common = { rememberAlignment: true, user: true, assistant: true };
   const defaults = {
     enabled: true,
-    chatgpt: { ...common, composer: true, rtlPunctuation: false, middleClick: false },
+    chatgpt: { ...common, composer: true, rtlPunctuation: true, middleClick: false },
     claude: { ...common, composer: true },
     gemini: { ...common },
     grok: { ...common, composer: true }
