@@ -87,12 +87,14 @@
 
   function findTurnAroundMessage(message) {
     let candidate = message;
+    let lastSafeCandidate = message;
 
     for (
       let level = 0;
       candidate && level < MAX_TURN_ANCESTORS;
       level += 1
     ) {
+      lastSafeCandidate = candidate;
       if (
         candidate.querySelector?.(ACTION_BAR_SELECTOR) ||
         firstTurnActionButton(candidate)
@@ -105,23 +107,25 @@
       candidate = parent;
     }
 
-    return message.parentElement || message;
+    // The parent may be exactly the shared container that stopped traversal.
+    // Returning it here would undo containsAnotherMessage()'s protection.
+    return lastSafeCandidate;
   }
 
-  function actionBarFromButton(button) {
-    if (!(button instanceof HTMLElement) || isInsideMessageContent(button)) {
+  function actionBarFromButton(button, turn) {
+    if (!(button instanceof HTMLElement) || !turn?.contains(button) || isInsideMessageContent(button)) {
       return null;
     }
 
     const namedBar = button.closest(ACTION_BAR_SELECTOR);
-    if (namedBar) return namedBar;
+    if (namedBar && turn.contains(namedBar)) return namedBar;
 
     let candidate = button.parentElement;
-    let fallback = candidate;
+    let fallback = null;
 
     for (
       let level = 0;
-      candidate && level < MAX_ACTION_BAR_ANCESTORS;
+      candidate && turn.contains(candidate) && level < MAX_ACTION_BAR_ANCESTORS;
       level += 1
     ) {
       if (candidate.querySelectorAll("button").length >= MIN_ACTION_BUTTONS) {
@@ -240,10 +244,9 @@
     getTurn(message) {
       // Use Grok's measured group-hover wrapper first. This is the element that
       // drives native Edit/Copy opacity in the live DOM supplied by the user.
-      return (
-        message.closest(TURN_HOVER_TARGET_SELECTOR) ||
-        findTurnAroundMessage(message)
-      );
+      const hoverTarget = message.closest(TURN_HOVER_TARGET_SELECTOR);
+      return hoverTarget && !containsAnotherMessage(hoverTarget, message)
+        ? hoverTarget : findTurnAroundMessage(message);
     },
 
     getMessageStorageId(message, turn) {
@@ -265,7 +268,7 @@
       const namedBar = turn.querySelector(ACTION_BAR_SELECTOR);
       const actionBar = namedBar instanceof HTMLElement
         ? namedBar
-        : actionBarFromButton(firstTurnActionButton(turn));
+        : actionBarFromButton(firstTurnActionButton(turn), turn);
       if (!actionBar) return null;
 
       return role === ROLE_USER
