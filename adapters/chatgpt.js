@@ -31,16 +31,10 @@
   const PROJECT_ID_REGEXP = new RegExp(`^${PROJECT_ID_PATTERN}$`, "i");
   const PROJECT_PATH_PATTERN = new RegExp(`^/g/${PROJECT_ID_PATTERN}/project$`, "i");
 
-  // Markup used by the optional RTL punctuation correction. ChatGPT can
-  // isolate Latin/numeric runs in <bdi> elements, but the same bidi problem
-  // also occurs in ordinary text when neutral punctuation follows such a run.
-  const RTL_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
-  const RTL_PUNCTUATION_SOURCE_BDI = "bdi";
-  const RTL_PUNCTUATION_SOURCE_TEXT = "text";
-  const TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
-  const INLINE_LTR_PUNCTUATION_RE =
-    /([A-Za-z0-9])([.!?؟…,:;،؛۔]+)(?=\s|$|[\u0590-\u05FF\u0600-\u06FF])/gu;
-  const NON_PROSE_PUNCTUATION_ANCESTOR_SELECTOR = "pre, code, kbd, samp, a";
+  // Markup used by the optional RTL <bdi> trailing-punctuation correction.
+  const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
+  const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
+  const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
 
   // ChatGPT may wrap one native action button in an extra child container.
   const SINGLE_BUTTON_WRAPPER_MAX_BUTTONS = 1;
@@ -113,59 +107,30 @@
     return lastTextNode;
   }
 
-  function createRtlPunctuationHelper(text, source) {
-    const helper = document.createElement("span");
-    helper.setAttribute(RTL_PUNCTUATION_HELPER_ATTRIBUTE, source);
-    // Keep neutral punctuation in its own RTL isolate. This is important when
-    // the next inline item is an LTR source/citation chip: otherwise the browser
-    // can resolve the punctuation as part of that following LTR run.
-    helper.setAttribute("dir", "rtl");
-    helper.style.unicodeBidi = "isolate";
-    helper.textContent = text;
-    return helper;
-  }
-
-  function restoreRtlPunctuation(target) {
+  function restoreRtlBdiPunctuation(target) {
     target
-      .querySelectorAll(`span[${RTL_PUNCTUATION_HELPER_ATTRIBUTE}]`)
+      .querySelectorAll(`span[${BDI_PUNCTUATION_HELPER_ATTRIBUTE}]`)
       .forEach((helper) => {
-        const source = helper.getAttribute(RTL_PUNCTUATION_HELPER_ATTRIBUTE);
-        const punctuation = helper.textContent || "";
-
-        if (source === RTL_PUNCTUATION_SOURCE_TEXT) {
-          const parent = helper.parentNode;
-          helper.replaceWith(document.createTextNode(punctuation));
-          parent?.normalize?.();
-          return;
-        }
-
-        // Empty values are treated as the old BDI helper format so a live page
-        // remains recoverable after upgrading the extension.
         const bdi = helper.previousSibling;
-        if (bdi instanceof HTMLElement && bdi.tagName === "BDI") {
-          const lastTextNode = getLastTextNode(bdi);
-          if (lastTextNode) {
-            lastTextNode.data += punctuation;
-            helper.remove();
-            return;
-          }
-        }
+        if (!(bdi instanceof HTMLElement) || bdi.tagName !== "BDI") return;
 
-        // If ChatGPT changed the surrounding DOM, preserve visible text rather
-        // than dropping punctuation while removing our helper markup.
-        helper.replaceWith(document.createTextNode(punctuation));
+        const lastTextNode = getLastTextNode(bdi);
+        if (!lastTextNode) return;
+
+        lastTextNode.data += helper.textContent || "";
+        helper.remove();
       });
   }
 
   function applyRtlBdiPunctuation(target) {
     for (const bdi of target.querySelectorAll("bdi")) {
       if (!(bdi instanceof HTMLElement)) continue;
-      if (bdi.closest(NON_PROSE_PUNCTUATION_ANCESTOR_SELECTOR)) continue;
+      if (bdi.closest(NON_PROSE_BDI_ANCESTOR_SELECTOR)) continue;
 
       const nextSibling = bdi.nextSibling;
       if (
         nextSibling instanceof HTMLElement &&
-        nextSibling.hasAttribute(RTL_PUNCTUATION_HELPER_ATTRIBUTE)
+        nextSibling.hasAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE)
       ) {
         continue;
       }
@@ -173,7 +138,7 @@
       const lastTextNode = getLastTextNode(bdi);
       if (!lastTextNode) continue;
 
-      const match = lastTextNode.data.match(TRAILING_PUNCTUATION_RE);
+      const match = lastTextNode.data.match(BDI_TRAILING_PUNCTUATION_RE);
       if (!match) continue;
 
       const punctuation = match[0];
@@ -181,46 +146,12 @@
       if (!remainingText.trim()) continue;
 
       lastTextNode.data = lastTextNode.data.slice(0, -punctuation.length);
-      bdi.after(createRtlPunctuationHelper(punctuation, RTL_PUNCTUATION_SOURCE_BDI));
+
+      const helper = document.createElement("span");
+      helper.setAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE, "");
+      helper.textContent = punctuation;
+      bdi.after(helper);
     }
-  }
-
-  function applyRtlInlinePunctuation(target) {
-    const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
-    const textNodes = [];
-    for (let textNode = walker.nextNode(); textNode; textNode = walker.nextNode()) {
-      textNodes.push(textNode);
-    }
-
-    for (const textNode of textNodes) {
-      const parent = textNode.parentElement;
-      if (!parent) continue;
-      if (parent.closest(`[${RTL_PUNCTUATION_HELPER_ATTRIBUTE}], bdi, ${NON_PROSE_PUNCTUATION_ANCESTOR_SELECTOR}`)) {
-        continue;
-      }
-
-      const matches = [...textNode.data.matchAll(INLINE_LTR_PUNCTUATION_RE)];
-      if (matches.length === 0) continue;
-
-      const fragment = document.createDocumentFragment();
-      let cursor = 0;
-
-      for (const match of matches) {
-        const punctuation = match[2];
-        const punctuationStart = match.index + match[1].length;
-        fragment.append(document.createTextNode(textNode.data.slice(cursor, punctuationStart)));
-        fragment.append(createRtlPunctuationHelper(punctuation, RTL_PUNCTUATION_SOURCE_TEXT));
-        cursor = punctuationStart + punctuation.length;
-      }
-
-      fragment.append(document.createTextNode(textNode.data.slice(cursor)));
-      textNode.replaceWith(fragment);
-    }
-  }
-
-  function applyRtlPunctuation(target) {
-    applyRtlBdiPunctuation(target);
-    applyRtlInlinePunctuation(target);
   }
 
   api.registerAdapter({
@@ -409,11 +340,9 @@
     },
 
     /**
-     * Optional correction for punctuation after Latin/numeric runs in RTL text.
-     * It covers both ChatGPT <bdi> isolates and ordinary prose, including cases
-     * where a following source/citation chip would otherwise pull punctuation
-     * into an LTR run. The existing "Fix RTL punctuation" setting controls all
-     * of this behavior, and disabling it restores the original text structure.
+     * Optional correction for trailing punctuation isolated inside ChatGPT BDI.
+     * The controller supplies the effective setting and role-approved mode.
+     * Disabling the setting or leaving RTL restores previously moved text.
      * @param {{target: HTMLElement, mode: string|null,
      *   punctuationEnabled?: boolean}} options
      */
@@ -421,11 +350,11 @@
       if (!(target instanceof HTMLElement)) return;
 
       if (!punctuationEnabled || mode !== "rtl") {
-        restoreRtlPunctuation(target);
+        restoreRtlBdiPunctuation(target);
         return;
       }
 
-      applyRtlPunctuation(target);
+      applyRtlBdiPunctuation(target);
     }
   });
 })();
