@@ -32,6 +32,7 @@ function harness(html, store = storageHarness()) {
   const { document, HTMLElement, Element, Event } = parseHTML(`<html><body>${html}</body></html>`);
   const context = vm.createContext({
     document, HTMLElement, Element, console, URL,
+    NodeFilter: { SHOW_TEXT: 4 },
     location: new URL("https://chatgpt.com/c/test"),
     chrome: { storage: store.storage },
     MutationObserver: class { observe() {} },
@@ -96,4 +97,52 @@ test("assistant and user clicks, resets, saved alignment and role settings stay 
   await reload.click("one-user", "rtl");
   assert(reload.get("one-assistant-text").classList.contains("cgpt-force-ltr"));
   assert(reload.get("one-user-text").classList.contains("cgpt-force-rtl"));
+});
+
+
+test("RTL punctuation toggle fixes BDI/source citations and inline numeric punctuation, then restores DOM", async () => {
+  const h = harness(turn("punct"));
+  const target = h.get("punct-assistant-text");
+  target.innerHTML = `
+    <p id="citation-case">השער נכון ל־<bdi>30.09.2026.</bdi><a href="https://example.com">Bank of Israel</a></p>
+    <p id="inline-case">העדכון בשעה 21:55; הבנק קונה דולר ב־3.1015.</p>
+    <p id="url-case">מקור <a href="https://example.com/path">https://example.com/path</a></p>
+  `;
+
+  const originalCitation = h.document.getElementById("citation-case").textContent;
+  const originalInline = h.document.getElementById("inline-case").textContent;
+  const originalUrl = h.document.getElementById("url-case").textContent;
+
+  await h.start();
+  await h.click("punct-assistant", "rtl");
+
+  const bdi = target.querySelector("bdi");
+  assert.equal(bdi.textContent, "30.09.2026");
+  const bdiHelper = bdi.nextSibling;
+  assert.equal(bdiHelper.getAttribute("data-cdc-bidi-punct"), "bdi");
+  assert.equal(bdiHelper.textContent, ".");
+  assert.equal(bdiHelper.getAttribute("dir"), "rtl");
+  assert.equal(bdiHelper.style.unicodeBidi, "isolate");
+  assert.equal(bdiHelper.nextSibling.tagName, "A", "citation stays after the isolated punctuation");
+
+  const inlineHelpers = [...h.document.getElementById("inline-case")
+    .querySelectorAll('[data-cdc-bidi-punct="text"]')];
+  assert.deepEqual(inlineHelpers.map(node => node.textContent), [";", "."]);
+  assert(inlineHelpers.every(node => node.getAttribute("dir") === "rtl"));
+  assert.equal(h.document.getElementById("url-case").querySelector("[data-cdc-bidi-punct]"), null,
+    "punctuation inside links is not rewritten");
+
+  assert.equal(h.document.getElementById("citation-case").textContent, originalCitation);
+  assert.equal(h.document.getElementById("inline-case").textContent, originalInline);
+  assert.equal(h.document.getElementById("url-case").textContent, originalUrl);
+
+  await h.settings.set("chatgpt.rtlPunctuation", false);
+  assert.equal(target.querySelector("[data-cdc-bidi-punct]"), null);
+  assert.equal(bdi.textContent, "30.09.2026.");
+  assert.equal(h.document.getElementById("citation-case").textContent, originalCitation);
+  assert.equal(h.document.getElementById("inline-case").textContent, originalInline);
+
+  await h.settings.set("chatgpt.rtlPunctuation", true);
+  assert.equal(target.querySelectorAll("[data-cdc-bidi-punct]").length, 3,
+    "re-enabling the toggle reapplies both correction types");
 });
