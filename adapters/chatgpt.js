@@ -33,7 +33,7 @@
 
   // Markup used by the optional RTL <bdi> trailing-punctuation correction.
   const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
-  const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+$/u;
+  const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+\s*$/u;
   const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
 
   // ChatGPT may wrap one native action button in an extra child container.
