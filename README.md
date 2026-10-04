@@ -2,6 +2,8 @@ Chatbot Direction Control — v1.1.2
 
 Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
+[Visit the website](https://masalha-alaa.github.io/chatbot-direction-control/).
+
 Features:
 
 - Use `Left Ctrl + Left Shift` to set the current composer paragraph to LTR/left-aligned.
