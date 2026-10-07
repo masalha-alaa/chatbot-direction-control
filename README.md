@@ -63,14 +63,16 @@ Floating reference panel
 ------------------------
 
 Select text and right-click **Pin to floating panel**, or right-click an equation
-or image directly. The reference stays at the same screen position as you scroll.
+or image directly. New panels start at the top left, below the page header and
+beside the narrow navigation rail. The reference stays at the same screen position as you scroll.
 Drag its header to move it, drag the bottom-right corner to resize it, and use the
 header buttons to collapse/expand or close it. Focus the header and use arrow keys
 to move it with the keyboard; Escape closes it when focus is in the panel.
 
 Pinning another item replaces the same tab's reference and keeps the panel position.
-The panel automatically fits each new reference, up to the available screen space;
-manual resizing applies until another item is pinned. Scrollbars appear only when
+The panel automatically fits each new reference, up to the available screen space.
+The minimum width includes the full header title and both controls, measured using
+the current font. Manual resizing applies until another item is pinned. Scrollbars appear only when
 the content genuinely exceeds the panel. Selecting part of a rendered equation captures the whole equation;
 selections can include text and multiple equations. Original content is untouched.
 A reference stays visible during in-tab conversation navigation, until replaced or

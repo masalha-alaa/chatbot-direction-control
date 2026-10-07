@@ -49,6 +49,10 @@ const image = 'data:image/png;base64,' + fs.readFileSync(path.join(root,'tests/f
   });
   await page.addScriptTag({path:path.join(root,'floating-panel.js')});
   await page.evaluate(()=>{context('#eq .mord');pin();});
+  const initial=await page.locator('#cdc-floating-panel').boundingBox();
+  assert.equal(initial.x,84,'New panels should start at the top left beside navigation');
+  assert.equal(initial.y,56,'New panels should start below the page header');
+  assert(await page.evaluate(()=>{const title=panelRoot().querySelector('.title');return title.scrollWidth<=title.clientWidth+1;}),'The full title must fit even with short references');
   assert.equal(await page.evaluate(()=>panelText()), await page.locator('#eq .katex-html').textContent());
   assert(await page.evaluate(()=>{const content=panelRoot().querySelector('.content');const atom=[...content.querySelectorAll('span')].find(node=>node.textContent==='a'&&node.getBoundingClientRect().width>3);const box=atom.getBoundingClientRect();const area=content.getBoundingClientRect();return box.x>=area.x&&box.right<=area.right&&box.y>=area.y&&box.bottom<=area.bottom;}),'Visible math must fit inside the panel');
   await page.evaluate(()=>{const node=document.querySelector('#eq .katex-html .mord').firstChild; const r=document.createRange();r.setStart(node,0);r.setEnd(node,1);getSelection().removeAllRanges();getSelection().addRange(r);context('#eq .katex-html .mord');pin();});
@@ -67,6 +71,9 @@ const image = 'data:image/png;base64,' + fs.readFileSync(path.join(root,'tests/f
   assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('[data-cdc-equation]').length),0,'An empty equation boundary must not add equation fragments');
   await page.evaluate(()=>{select('#text',4,10);context('#text');pin();});
   assert.equal(await page.evaluate(()=>panelText()),'silver');
+  await page.evaluate(()=>{panelRoot().querySelector('.title').style.fontSize='18px';context('#text');pin();});
+  assert(await page.evaluate(()=>{const title=panelRoot().querySelector('.title');return title.scrollWidth<=title.clientWidth+1;}),'Header width must account for font differences');
+  await page.evaluate(()=>{panelRoot().querySelector('.title').style.fontSize='';context('#text');pin();});
   assert((await page.locator('#cdc-floating-panel').boundingBox()).height<120,'Short text must fit without an empty fixed-height panel');
   await page.evaluate(()=>{select('#message');context('#text');pin();});
   assert.match(await page.evaluate(()=>panelText()), /silver fox/);

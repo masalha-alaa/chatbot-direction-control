@@ -17,6 +17,8 @@
   const MATH_ATTRS = new Set("display encoding mathvariant stretchy fence separator lspace rspace accent accentunder columnalign rowalign columnspacing rowspacing colspan rowspan".split(" "));
   const MAX_NODES = 6000;
   const GAP = 12;
+  // Start below the page header and beside the narrow navigation rail.
+  const INITIAL_POSITION = { x: 84, y: 56 };
   let pending = null;
   let panel = null;
   let toastTimer;
@@ -211,6 +213,16 @@
     panel = null;
   }
   function clamp(value, min, max) { return Math.max(min, Math.min(value, max)); }
+  function measureHeaderWidth() {
+    const header = panel.shell.querySelector("header").cloneNode(true);
+    // Measure the whole title and both controls at the panel's actual font.
+    // A fixed minimum misses small font/platform differences and cuts the title.
+    Object.assign(header.style, { position: "absolute", visibility: "hidden",
+      width: "max-content", pointerEvents: "none", font: getComputedStyle(panel.shell).font });
+    panel.shadow.appendChild(header);
+    try { return Math.max(220, Math.ceil(header.getBoundingClientRect().width) + 10); }
+    finally { header.remove(); }
+  }
   function fitContent() {
     if (!panel || panel.manualSize) return;
     // Measure an independent inert copy, first at its natural width, then at
@@ -219,8 +231,10 @@
     measure.classList.add("measure");
     panel.shadow.appendChild(measure);
     try {
+      panel.minimumWidth = measureHeaderWidth();
+      const minimum = Math.min(panel.minimumWidth, innerWidth - GAP * 2);
       panel.width = clamp(Math.ceil(measure.getBoundingClientRect().width) + 2,
-        Math.min(220, innerWidth - GAP * 2), Math.min(480, innerWidth - GAP * 2));
+        minimum, Math.max(minimum, Math.min(480, innerWidth - GAP * 2)));
       measure.style.width = `${panel.width - 2}px`;
       // Include native scrollbar thickness for genuinely oversized formulas.
       // Windows scrollbars consume height; measuring visible overflow alone
@@ -234,7 +248,7 @@
   function place() {
     if (!panel) return;
     const { host, collapsed } = panel;
-    const width = clamp(panel.width, Math.min(220, innerWidth - GAP * 2), innerWidth - GAP * 2);
+    const width = clamp(panel.width, Math.min(panel.minimumWidth, innerWidth - GAP * 2), innerWidth - GAP * 2);
     const height = collapsed ? 40 : clamp(panel.height, Math.min(80, innerHeight - GAP * 2), innerHeight - GAP * 2);
     panel.x = clamp(panel.x, GAP, innerWidth - width - GAP);
     panel.y = clamp(panel.y, GAP, innerHeight - height - GAP);
@@ -285,7 +299,7 @@
     shadow.appendChild(shell);
     document.documentElement.appendChild(host);
     panel = { host, shadow, shell, content: shell.querySelector(".content"), collapsed: false,
-      manualSize: false, width: 380, height: 100, x: innerWidth - 400, y: 80 };
+      manualSize: false, minimumWidth: 220, width: 380, height: 100, ...INITIAL_POSITION };
     const header = shell.querySelector("header");
     const collapse = shell.querySelector(".collapse");
     shell.querySelector(".close").addEventListener("click", closePanel);
@@ -320,7 +334,7 @@
         const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
         if (resize) {
           panel.manualSize = true;
-          panel.width = clamp(gesture.width + dx, 220, innerWidth - panel.x - GAP);
+          panel.width = clamp(gesture.width + dx, Math.min(panel.minimumWidth, innerWidth - panel.x - GAP), innerWidth - panel.x - GAP);
           panel.height = clamp(gesture.height + dy, 80, innerHeight - panel.y - GAP);
         } else { panel.x = gesture.left + dx; panel.y = gesture.top + dy; }
         place();
