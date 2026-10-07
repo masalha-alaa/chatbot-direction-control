@@ -11,6 +11,7 @@ Features:
 - Change individual chatbot messages between LTR and RTL using the alignment icons below each message.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
+- Pin selected text, whole equations, or images in one draggable, resizable floating reference panel per tab.
 - Middle-click a recent ChatGPT sidebar conversation or a project folder to open it
   in a background tab. Project folders open their project page; conversations inside
   projects are not included. Left-click, right-click, modified clicks, wheel scrolling,
@@ -41,6 +42,8 @@ chatbot tabs once so they load the updated content scripts.
 - **Fix RTL punctuation** corrects trailing punctuation in ChatGPT RTL messages.
   It is disabled when both alignment-button settings are off; its choice is kept.
   Disabling it restores punctuation in currently processed messages.
+- **Floating reference panel** enables the right-click **Pin to floating panel** action.
+  It defaults to on for each chatbot; disabling it or the master switch closes the panel.
 - **Mouse middle click** opens supported ChatGPT sidebar chats and project folders
   in new background tabs. Both the content script and background worker enforce
   this preference and the master switch.
@@ -55,6 +58,36 @@ For a browser check, load the extension unpacked, refresh chatbot tabs, and try
 both message-role switches, paragraph shortcuts, persistence across reloads,
 the punctuation dependency, and middle-click on supported sidebar rows. Check
 that the master switch pauses these features and retains individual choices.
+
+Floating reference panel
+------------------------
+
+Select text and right-click **Pin to floating panel**, or right-click an equation
+or image directly. The reference stays at the same screen position as you scroll.
+Drag its header to move it, drag the bottom-right corner to resize it, and use the
+header buttons to collapse/expand or close it. Focus the header and use arrow keys
+to move it with the keyboard; Escape closes it when focus is in the panel.
+
+Pinning another item replaces the same tab's reference and keeps the panel position
+and size. Selecting part of a rendered equation captures the whole equation;
+selections can include text and multiple equations. Original content is untouched.
+A reference stays visible during in-tab conversation navigation, until replaced or
+closed; refreshing the page clears it. Panels are independent across tabs.
+
+The new `contextMenus` permission supplies the native right-click entry, limited to
+supported chatbot pages. The entry also appears over unselected page content so an
+equation can be pinned without selecting it; using it on plain unselected content
+shows a short hint. Editors and embedded frames are excluded. Content never leaves
+the tab or goes into extension storage. Image copies use the original image URL and
+may request it again from its original host, subject to that site's access rules.
+
+Snapshots preserve computed typography and rendered KaTeX math in an isolated shadow
+tree. Only inert presentation markup is copied; scripts, handlers, embedded frames,
+custom elements, and external SVG references are excluded. Oversized selections are
+rejected with a hint. Animated images remain animated; video/canvas capture and
+persistent saved references are outside this feature.
+
+Reload the unpacked extension and refresh chatbot tabs to try the new menu.
 
 Composer shortcut behavior
 --------------------------
@@ -80,6 +113,8 @@ The extension separates generic behavior from chatbot-specific DOM knowledge:
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
 - `sidebar-navigation.js`: opt-in, generic middle-click handling for sidebar conversations and project folders.
 - `background.js`: validates tab-opening requests and opens an inactive tab in the source window.
+- `floating-panel-background.js`: registers the native context menu and routes pin actions to the source tab.
+- `floating-panel.js`: captures inert formatted references and manages the isolated floating panel.
 - `styles.css`: shared direction/button styling.
 
 `composer-direction.js` and `response-direction.js` contain no chatbot host checks.
@@ -153,3 +188,4 @@ test. The npm dependencies are development-only and are not needed by the extens
 ### Chrome Web Store link
 
 https://chromewebstore.google.com/detail/jddejfelmjiohnmgcjpmlodhcfjpljej
+

@@ -320,12 +320,13 @@ test("worker reports tab-creation failures and ignores unrelated messages", asyn
   assert.equal(h.onMessage({type:"other"},h.sender,()=>assert.fail("Unexpected response")), undefined);
 });
 
-test("manifest includes the worker/controller, release version and storage-only permissions", () => {
+test("manifest includes the worker/controllers, release version and required permissions", () => {
   const manifest = JSON.parse(read("manifest.json"));
   assert.equal(manifest.version, "1.1.3");
-  assert.deepEqual(manifest.permissions, ["storage"]);
+  assert.deepEqual(manifest.permissions, ["storage", "contextMenus"]);
   assert.equal(manifest.background.service_worker, "background.js");
   assert(manifest.content_scripts[0].js.includes("sidebar-navigation.js"));
+  assert(manifest.content_scripts[0].js.includes("floating-panel.js"));
   for (const script of manifest.content_scripts[0].js) assert(fs.existsSync(path.join(root,script)));
 });
 
