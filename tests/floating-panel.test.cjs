@@ -55,7 +55,7 @@ test("native pin menu follows per-site/master preferences and routes only a vali
 function pageHarness() {
   const { document, Element, HTMLElement, Node, Event } = parseHTML(`<html><body><article>
     <p id="text">A quiet river.</p>
-    <span id="equation" data-math-display="true" data-math-source="a_1+g"><span class="katex"><span id="part">a</span><sub>1</sub><span> + g</span></span></span>
+    <span id="equation" data-math-display="true" data-math-source="a_1+g"><span class="katex"><span class="katex-mathml"><math><mtext>Hidden equation</mtext></math></span><span class="katex-html"><span id="part">a</span><sub>1</sub><span> + g</span></span></span></span>
     <img id="image" alt="Sample" src="https://chatgpt.com/image.png">
     <div id="unsafe"><b onclick="bad()">Bold</b><script>bad()</script><iframe></iframe><a href="javascript:bad()">Link</a><button>Button</button></div>
     <textarea id="editor">Draft</textarea></article></body></html>`);
@@ -99,6 +99,18 @@ test("a partially selected equation stays whole, copies typography and survives 
   assert.equal(content.textContent,"a1 + g");
   assert.equal(content.firstChild.style.fontFamily,"TestMath");
   assert.equal(content.querySelectorAll("[id]").length,0);
+  assert.equal(content.querySelectorAll("math").length,0,"hidden MathML must not leak out of its original clipping CSS");
+  assert.equal(content.firstChild.getAttribute("aria-label"),"a_1+g");
+});
+
+test("a selection ending on an empty equation boundary does not expand unselected math", () => {
+  const h=pageHarness(), source=h.el("text").parentElement, equation=h.el("equation");
+  h.select({commonAncestorContainer:source,intersectsNode:node =>
+    node===source || node===h.el("text") || node===h.el("text").firstChild || node===equation});
+  h.context("text");h.pin();
+  const content=h.shadow().querySelector(".content");
+  assert.equal(content.textContent,"A quiet river.");
+  assert.equal(content.querySelectorAll("[data-cdc-equation]").length,0);
 });
 
 test("pinning replaces one panel, expands a collapsed panel and disabling closes it", () => {

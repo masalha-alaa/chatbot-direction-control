@@ -68,8 +68,10 @@ Drag its header to move it, drag the bottom-right corner to resize it, and use t
 header buttons to collapse/expand or close it. Focus the header and use arrow keys
 to move it with the keyboard; Escape closes it when focus is in the panel.
 
-Pinning another item replaces the same tab's reference and keeps the panel position
-and size. Selecting part of a rendered equation captures the whole equation;
+Pinning another item replaces the same tab's reference and keeps the panel position.
+The panel automatically fits each new reference, up to the available screen space;
+manual resizing applies until another item is pinned. Scrollbars appear only when
+the content genuinely exceeds the panel. Selecting part of a rendered equation captures the whole equation;
 selections can include text and multiple equations. Original content is untouched.
 A reference stays visible during in-tab conversation navigation, until replaced or
 closed; refreshing the page clears it. Panels are independent across tabs.
@@ -88,6 +90,13 @@ rejected with a hint. Animated images remain animated; video/canvas capture and
 persistent saved references are outside this feature.
 
 Reload the unpacked extension and refresh chatbot tabs to try the new menu.
+
+Browser regression check (development only): install `playwright` and `katex`
+locally with `npm install --no-save --package-lock=false playwright katex`, run
+`npx playwright install chromium`, then `node tests/floating-panel.browser.cjs`.
+The fixture recreates constrained math scrollers and checks complete equations,
+empty selection boundaries, compact sizing, real PNG loading, and panel controls.
+`CDC_CHROMIUM_PATH` may point to an existing Chromium executable.
 
 Composer shortcut behavior
 --------------------------
@@ -188,4 +197,3 @@ test. The npm dependencies are development-only and are not needed by the extens
 ### Chrome Web Store link
 
 https://chromewebstore.google.com/detail/jddejfelmjiohnmgcjpmlodhcfjpljej
-

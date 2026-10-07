@@ -6,6 +6,7 @@
 
   const HOST_ID = "cdc-floating-panel";
   const MATH_SELECTOR = "[data-math-source], [data-math-display], .katex-display, .katex, mjx-container, math";
+  const MATH_WRAPPER = "[data-math-source], [data-math-display], .katex-display, .katex, .katex-html, mjx-container";
   const SKIP = new Set(["script", "style", "iframe", "object", "embed", "input", "textarea", "select", "button", "link", "meta", "audio", "video"]);
   const HTML_TAGS = new Set("a abbr b bdi bdo blockquote br code dd del div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img kbd li mark ol p pre s samp small span strong sub sup table tbody td th thead tr tfoot u ul wbr".split(" "));
   const VECTOR_TAGS = new Set("svg g path line rect circle ellipse polygon polyline text tspan".split(" "));
@@ -35,6 +36,18 @@
     } catch { return null; }
   }
 
+  // A range ending at the start of an equation can intersect its outer span
+  // without selecting any equation content. Do not expand that empty boundary.
+  function selectedMathContent(source, range) {
+    if (!range.intersectsNode(source)) return false;
+    if (source.nodeType === Node.TEXT_NODE) {
+      const start = range.startContainer === source ? range.startOffset : 0;
+      const end = range.endContainer === source ? range.endOffset : source.textContent.length;
+      return Boolean(source.textContent.slice(start, end).trim());
+    }
+    return [...source.childNodes].some(child => selectedMathContent(child, range));
+  }
+
   /**
    * Build an inert snapshot rather than inserting source HTML. Only presentation
    * tags/attributes are copied; scripts, event handlers, IDs, custom elements and
@@ -52,7 +65,11 @@
     if (source.nodeType !== Node.ELEMENT_NODE) return null;
     const tag = source.localName;
     if (SKIP.has(tag) || editable(source)) return null;
+    // KaTeX's hidden accessibility tree uses clipping CSS. Keeping a second
+    // positioned tree can leak a sliver of text after clipping styles change.
+    if (source.matches(".katex-mathml") && source.parentElement?.querySelector(".katex-html")) return null;
     const isMath = inMath || source.matches(MATH_SELECTOR);
+    if (isMath && !inMath && range && !selectedMathContent(source, range)) return null;
     // Intersecting any part of an equation captures its complete rendered tree.
     if (isMath) range = null;
     let copy;
@@ -63,7 +80,10 @@
     copy = document.createElementNS(svg || math ? source.namespaceURI : "http://www.w3.org/1999/xhtml",
       svg || math || HTML_TAGS.has(tag) ? tag : "span");
     const computed = getComputedStyle(source);
-    for (const property of [...TEXT_STYLES, ...(isMath ? MATH_STYLES : [])]) {
+    const wrapper = source.matches(MATH_WRAPPER);
+    // Only the inner math layout needs exact dimensions/offsets. Wrapper
+    // dimensions and overflow belong to ChatGPT's response column and scroller.
+    for (const property of [...TEXT_STYLES, ...(isMath && !wrapper ? MATH_STYLES : [])]) {
       const value = computed.getPropertyValue(property);
       if (value && !/url\s*\(/i.test(value)) copy.style.setProperty(property, value);
     }
@@ -72,9 +92,24 @@
     if (isMath) copy.style.direction = "ltr";
     // Computed block widths belong to the original response column. Keeping
     // them would center the formula outside the narrower panel's visible area.
-    if (source.matches("[data-math-source], [data-math-display], .katex-display, .katex, .katex-html, mjx-container")) {
+    if (wrapper) {
       copy.style.width = "auto";
       copy.style.minWidth = "0";
+      copy.style.height = "auto";
+      copy.style.maxHeight = "none";
+      copy.style.overflow = "visible";
+      copy.style.margin = "0";
+      if (source.matches(".katex, .katex-html")) copy.style.display = "inline-block";
+    }
+    if (isMath && !inMath) {
+      const display = source.matches('.katex-display, [data-math-display="true"]') || Boolean(source.querySelector(".katex-display"));
+      copy.setAttribute("data-cdc-equation", display ? "display" : "inline");
+      const label = source.getAttribute("data-math-source") || source.querySelector('annotation[encoding="application/x-tex"]')?.textContent;
+      if (label) { copy.setAttribute("role", "math"); copy.setAttribute("aria-label", label); }
+      copy.style.width = "max-content";
+      copy.style.minWidth = display ? "100%" : "0";
+      copy.style.display = display ? "block" : "inline-block";
+      copy.style.unicodeBidi = "isolate";
     }
     if (source.hasAttribute("dir")) copy.setAttribute("dir", source.getAttribute("dir"));
     if (source.hasAttribute("aria-hidden")) copy.setAttribute("aria-hidden", source.getAttribute("aria-hidden"));
@@ -132,8 +167,6 @@
       // Display equation wrappers should fit the panel; internal math widths
       // and positioning remain intact, and oversized formulas can scroll.
       if (mathRoot(source)) {
-        copy.style.width = "auto";
-        copy.style.minWidth = "0";
         copy.style.direction = "ltr";
         copy.style.unicodeBidi = "isolate";
       }
@@ -153,12 +186,16 @@
     header { display:flex; flex:none; align-items:center; gap:8px; padding:6px 8px 6px 12px;
       height:40px; cursor:grab; user-select:none; touch-action:none; direction:ltr; }
     header:active { cursor:grabbing; }
-    .title { flex:1; font-weight:600; }
+    .title { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; }
     button { font:20px/1 system-ui; display:grid; place-items:center; width:28px; height:28px;
-      padding:0; border:0; border-radius:6px; color:inherit; background:transparent; cursor:pointer; }
+      flex:0 0 28px; padding:0; border:0; border-radius:6px; color:inherit; background:transparent; cursor:pointer; }
     button:hover { background:#ffffff20; }
     button:focus-visible, header:focus-visible { outline:2px solid #aab8ff; outline-offset:-2px; }
-    .content { flex:1; min-height:0; overflow:auto; padding:14px; user-select:text; }
+    .content { flex:1; min-height:0; min-width:0; overflow:auto; padding:12px; user-select:text; color-scheme:dark; }
+    .measure { position:absolute; visibility:hidden; pointer-events:none; height:auto;
+      max-height:none; overflow:visible; width:max-content; top:0; left:0; }
+    .content > :first-child { margin-top:0; }
+    .content > :last-child { margin-bottom:0; }
     .content img { max-width:100%; max-height:360px; height:auto; object-fit:contain; }
     .content pre, .content code { direction:ltr !important; unicode-bidi:isolate; }
     .resize { position:absolute; right:2px; bottom:2px; width:18px; height:18px;
@@ -174,11 +211,31 @@
     panel = null;
   }
   function clamp(value, min, max) { return Math.max(min, Math.min(value, max)); }
+  function fitContent() {
+    if (!panel || panel.manualSize) return;
+    // Measure an independent inert copy, first at its natural width, then at
+    // the panel width so wrapped text determines the height. No fixed empty area.
+    const measure = panel.content.cloneNode(true);
+    measure.classList.add("measure");
+    panel.shadow.appendChild(measure);
+    try {
+      panel.width = clamp(Math.ceil(measure.getBoundingClientRect().width) + 2,
+        Math.min(220, innerWidth - GAP * 2), Math.min(480, innerWidth - GAP * 2));
+      measure.style.width = `${panel.width - 2}px`;
+      // Include native scrollbar thickness for genuinely oversized formulas.
+      // Windows scrollbars consume height; measuring visible overflow alone
+      // would leave the lower edge of a wide equation behind its scrollbar.
+      measure.style.overflow = "auto";
+      panel.height = clamp(Math.ceil(measure.getBoundingClientRect().height) + 42,
+        Math.min(80, innerHeight - GAP * 2), Math.min(500, innerHeight - GAP * 2));
+    } finally { measure.remove(); }
+    place();
+  }
   function place() {
     if (!panel) return;
     const { host, collapsed } = panel;
     const width = clamp(panel.width, Math.min(220, innerWidth - GAP * 2), innerWidth - GAP * 2);
-    const height = collapsed ? 40 : clamp(panel.height, Math.min(100, innerHeight - GAP * 2), innerHeight - GAP * 2);
+    const height = collapsed ? 40 : clamp(panel.height, Math.min(80, innerHeight - GAP * 2), innerHeight - GAP * 2);
     panel.x = clamp(panel.x, GAP, innerWidth - width - GAP);
     panel.y = clamp(panel.y, GAP, innerHeight - height - GAP);
     for (const [key, value] of Object.entries({ left: panel.x, top: panel.y, width, height })) {
@@ -227,8 +284,8 @@
     shell.innerHTML = '<header tabindex="0" aria-label="Move pinned reference using arrow keys"><span class="title">Pinned reference</span><button type="button" class="collapse" aria-label="Collapse panel" aria-expanded="true" title="Collapse">−</button><button type="button" class="close" aria-label="Close panel" title="Close">×</button></header><div class="content"></div><div class="resize" title="Resize panel"></div>';
     shadow.appendChild(shell);
     document.documentElement.appendChild(host);
-    panel = { host, shell, content: shell.querySelector(".content"), collapsed: false,
-      width: 380, height: 260, x: innerWidth - 400, y: 80 };
+    panel = { host, shadow, shell, content: shell.querySelector(".content"), collapsed: false,
+      manualSize: false, width: 380, height: 100, x: innerWidth - 400, y: 80 };
     const header = shell.querySelector("header");
     const collapse = shell.querySelector(".collapse");
     shell.querySelector(".close").addEventListener("click", closePanel);
@@ -262,8 +319,9 @@
         if (!gesture || event.pointerId !== gesture.id || !panel) return;
         const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
         if (resize) {
+          panel.manualSize = true;
           panel.width = clamp(gesture.width + dx, 220, innerWidth - panel.x - GAP);
-          panel.height = clamp(gesture.height + dy, 100, innerHeight - panel.y - GAP);
+          panel.height = clamp(gesture.height + dy, 80, innerHeight - panel.y - GAP);
         } else { panel.x = gesture.left + dx; panel.y = gesture.top + dy; }
         place();
       });
@@ -291,12 +349,18 @@
     panel.content.style.background = pending.background;
     panel.content.style.color = pending.color;
     panel.content.replaceChildren(pending.fragment.cloneNode(true));
-    place();
+    panel.content.scrollTop = 0;
+    panel.content.scrollLeft = 0;
+    panel.manualSize = false;
+    fitContent();
+    for (const image of panel.content.querySelectorAll("img")) {
+      image.addEventListener("load", fitContent, { once: true });
+    }
     respond({ ok: true });
   });
   settings.subscribe(() => {
     if (!enabled()) { pending = null; closePanel(); document.getElementById("cdc-floating-toast")?.remove(); }
   });
-  window.addEventListener("resize", place);
+  window.addEventListener("resize", () => { if (panel?.manualSize) place(); else fitContent(); });
   window.addEventListener("pagehide", () => { pending = null; closePanel(); });
 })();
