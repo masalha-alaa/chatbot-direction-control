@@ -21,7 +21,7 @@
   // Independent keys prevent simultaneous popup writes from replacing other
   // preferences. Existing per-message alignment keys remain compatible.
   const PREFIX = "cdc:settings:";
-  const common = { rememberAlignment: true, user: true, assistant: true, floatingPanel: true };
+  const common = { rememberAlignment: true, user: true, assistant: true, floatingPanel: false };
   const defaults = {
     enabled: true,
     chatgpt: { ...common, composer: true, rtlPunctuation: true, middleClick: false },

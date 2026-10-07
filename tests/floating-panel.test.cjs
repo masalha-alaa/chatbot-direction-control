@@ -32,6 +32,13 @@ function workerHarness(preferences = {}) {
 test("native pin menu follows per-site/master preferences and routes only a validated top-level page", async () => {
   const h = workerHarness(); await flush();
   const id = "cdc:pin-floating-panel";
+  assert.equal(h.menus.get(id).visible, false);
+  await h.click({ menuItemId: id, pageUrl: "https://chatgpt.com/c/test", frameId: 0, editable: false }, { id: 7 });
+  assert.equal(h.routed.length, 0);
+  for (const site of ["chatgpt", "claude", "gemini", "grok"]) {
+    await h.settings.set(`${site}.floatingPanel`, true);
+  }
+  await flush();
   assert.equal(h.menus.size, 1);
   assert.equal(h.menus.get(id).documentUrlPatterns.length, 4);
   assert.deepEqual(Array.from(h.menus.get(id).contexts),["selection","page"]);

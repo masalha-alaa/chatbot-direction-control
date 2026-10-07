@@ -46,7 +46,7 @@ chatbot tabs once so they load the updated content scripts.
   It is disabled when both alignment-button settings are off; its choice is kept.
   Disabling it restores punctuation in currently processed messages.
 - **Floating reference panel** enables the right-click **Pin to floating panel** action.
-  It defaults to on for each chatbot; disabling it or the master switch closes the panel.
+  It defaults to off for each chatbot; disabling it or the master switch closes the panel.
 - **Mouse middle click** opens supported ChatGPT sidebar chats and project folders
   in new background tabs. Both the content script and background worker enforce
   this preference and the master switch.
