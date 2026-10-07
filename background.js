@@ -8,7 +8,8 @@ importScripts(
   "adapters/chatgpt.js",
   "adapters/gemini.js",
   "adapters/claude.js",
-  "adapters/grok.js"
+  "adapters/grok.js",
+  "floating-panel-background.js"
 );
 
 /**
