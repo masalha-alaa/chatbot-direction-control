@@ -7,7 +7,7 @@
   if (!chrome.contextMenus) return;
 
   const patterns = chrome.runtime.getManifest().content_scripts.flatMap(script => script.matches);
-  const properties = { title: "Pin to floating panel", contexts: ["selection", "image", "page"],
+  const properties = { title: "Pin to floating panel", contexts: ["selection", "page"],
     documentUrlPatterns: patterns };
   let updates = Promise.resolve();
 
@@ -36,7 +36,7 @@
   syncMenu();
 
   chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-    if (info.menuItemId !== MENU_ID || !Number.isInteger(tab?.id) || info.editable ||
+    if (info.menuItemId !== MENU_ID || !Number.isInteger(tab?.id) || info.editable || info.mediaType ||
         (info.frameId != null && info.frameId !== 0)) return;
     try {
       const source = new URL(info.pageUrl);

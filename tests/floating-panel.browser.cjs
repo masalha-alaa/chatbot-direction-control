@@ -8,7 +8,6 @@ const math = katex.renderToString(String.raw`a_1 \approx g + a_\text{forward}`, 
 const second = katex.renderToString(String.raw`x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}`, {displayMode:true});
 const integral = katex.renderToString(String.raw`\int_0^1 x^2\,dx = \frac13`, {displayMode:true});
 const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:true});
-const image = 'data:image/png;base64,' + fs.readFileSync(path.join(root,'tests/fixtures/pin-rocket.png')).toString('base64');
 (async () => {
   const executablePath = process.env.CDC_CHROMIUM_PATH;
   console.log('Browser available');
@@ -25,8 +24,8 @@ const image = 'data:image/png;base64,' + fs.readFileSync(path.join(root,'tests/f
       <article id="message"><p id="text">The silver fox crossed the <strong>quiet bridge</strong> at 07:42.</p>
       <span id="eq" data-math-display="true" data-math-source="formula">${math}</span>
       <p id="tail" dir="rtl">هذه معادلة للاختبار ${second} نهاية النص.</p><span id="integral" data-math-display="true">${integral}</span></article>
-      <div id="unsafe"><b onclick="window.failed=1">Safe bold</b><script type="application/json">bad</script><iframe></iframe><button>bad</button><a href="javascript:window.failed=1">safe link</a></div>
-      <span id="wide" data-math-display="true">${wide}</span><img id="image" src="${image}" style="width:64px;height:64px" alt="Sample"><textarea id="editor">Private draft</textarea>
+      <div id="unsafe"><b onclick="window.failed=1">Safe bold</b><script type="application/json">bad</script><iframe></iframe><button>bad</button><a href="javascript:window.failed=1">safe link</a><img alt="Excluded"><svg><text>Excluded graphic</text></svg></div>
+      <span id="wide" data-math-display="true">${wide}</span><textarea id="editor">Private draft</textarea>
       <div style="height:2400px"></div></body></html>`});
   });
   await page.goto('https://chatgpt.com/c/pin-test');
@@ -91,22 +90,20 @@ const image = 'data:image/png;base64,' + fs.readFileSync(path.join(root,'tests/f
   const resized=await page.locator('#cdc-floating-panel').boundingBox();assert(resized.width>dragged.width);assert(resized.height>dragged.height);
   await page.evaluate(()=>panelRoot().querySelector('.collapse').click());
   assert.equal((await page.locator('#cdc-floating-panel').boundingBox()).height,40);
-  await page.evaluate(()=>{getSelection().removeAllRanges();context('#image');pin();});
-  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.content img').alt),'Sample');
-  await page.waitForFunction(()=>{const image=panelRoot().querySelector('.content img');return image.complete&&image.naturalWidth===72;});
-  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.content img').style.width),'64px');
+  await page.evaluate(()=>{select('#text',4,10);context('#text');pin();});
+  assert.equal(await page.evaluate(()=>panelText()),'silver');
   assert.equal(await page.evaluate(()=>panelRoot().querySelector('.collapse').getAttribute('aria-expanded')),'true');
   await page.setViewportSize({width:320,height:240});
   await page.waitForFunction(()=>{const box=document.getElementById('cdc-floating-panel').getBoundingClientRect();return box.right<=innerWidth&&box.bottom<=innerHeight;});
   const small=await page.locator('#cdc-floating-panel').boundingBox();assert(small.x>=0&&small.y>=0&&small.x+small.width<=320&&small.y+small.height<=240);
   await page.evaluate(()=>{select('#unsafe');context('#unsafe');pin();});
-  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.content').querySelectorAll('[onclick],script,iframe,button,[href],[id]').length),0);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.content').querySelectorAll('[onclick],script,iframe,button,img,svg,[href],[id]').length),0);
   assert.equal(await page.evaluate(()=>window.failed),undefined);
   await page.evaluate(()=>{select('#text');context('#text');document.querySelector('#text').remove();pin();});
   assert.match(await page.evaluate(()=>panelText()),/silver fox/);
   await page.evaluate(()=>{featureEnabled=false;subscribers.forEach(fn=>fn());});
   assert.equal(await page.locator('#cdc-floating-panel').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS: rendered KaTeX, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, images, small viewport, source rerender, disable cleanup');
+  console.log('PASS: rendered KaTeX, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

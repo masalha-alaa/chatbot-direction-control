@@ -34,13 +34,14 @@ test("native pin menu follows per-site/master preferences and routes only a vali
   const id = "cdc:pin-floating-panel";
   assert.equal(h.menus.size, 1);
   assert.equal(h.menus.get(id).documentUrlPatterns.length, 4);
+  assert.deepEqual(Array.from(h.menus.get(id).contexts),["selection","page"]);
   const info = { menuItemId: id, pageUrl: "https://chatgpt.com/c/test", frameId: 0, editable: false };
   await h.click(info, { id: 7 });
   assert.equal(h.routed.length, 1);
   assert.equal(h.routed[0][0], 7);
   assert.equal(h.routed[0][1].type, id);
   assert.equal(h.routed[0][2].frameId, 0);
-  for (const overrides of [{frameId:1}, {editable:true}, {pageUrl:"https://example.com"}, {pageUrl:"http://chatgpt.com/"}, {menuItemId:"other"}]) await h.click({...info,...overrides}, {id:7});
+  for (const overrides of [{frameId:1}, {editable:true}, {mediaType:"image"}, {pageUrl:"https://example.com"}, {pageUrl:"http://chatgpt.com/"}, {menuItemId:"other"}]) await h.click({...info,...overrides}, {id:7});
   assert.equal(h.routed.length, 1);
   await h.settings.set("chatgpt.floatingPanel", false); await flush();
   assert(!h.menus.get(id).documentUrlPatterns.includes("https://chatgpt.com/*"));
@@ -56,8 +57,7 @@ function pageHarness() {
   const { document, Element, HTMLElement, Node, Event } = parseHTML(`<html><body><article>
     <p id="text">A quiet river.</p>
     <span id="equation" data-math-display="true" data-math-source="a_1+g"><span class="katex"><span class="katex-mathml"><math><mtext>Hidden equation</mtext></math></span><span class="katex-html"><span id="part">a</span><sub>1</sub><span> + g</span></span></span></span>
-    <img id="image" alt="Sample" src="https://chatgpt.com/image.png">
-    <div id="unsafe"><b onclick="bad()">Bold</b><script>bad()</script><iframe></iframe><a href="javascript:bad()">Link</a><button>Button</button></div>
+    <div id="unsafe"><b onclick="bad()">Bold</b><script>bad()</script><iframe></iframe><a href="javascript:bad()">Link</a><button>Button</button><img alt="Excluded"><svg xmlns="http://www.w3.org/2000/svg"><text>Excluded graphic</text></svg></div>
     <textarea id="editor">Draft</textarea></article></body></html>`);
   const shadows = new Map(), subscriptions = [], listeners = new Map();
   let enabled = true, selection = null, receiver;
@@ -118,9 +118,11 @@ test("pinning replaces one panel, expands a collapsed panel and disabling closes
   const host = h.el("cdc-floating-panel");
   h.shadow().querySelector(".collapse").click();
   assert.equal(host.style.height,"40px");
-  h.context("image");h.pin();
+  const text=h.el("text").firstChild;
+  h.select({commonAncestorContainer:text,startContainer:text,endContainer:text,startOffset:0,endOffset:text.textContent.length,intersectsNode:()=>true});
+  h.context("text");h.pin();
   assert.equal(h.el("cdc-floating-panel"),host);
-  assert.equal(h.shadow().querySelector(".content img").alt,"Sample");
+  assert.equal(h.shadow().querySelector(".content").textContent,"A quiet river.");
   assert.equal(h.shadow().querySelector(".collapse").getAttribute("aria-expanded"),"true");
   h.disable();assert.equal(h.el("cdc-floating-panel"),null);
 });
@@ -131,7 +133,7 @@ test("mixed selected content excludes scripts, frames, handlers, controls and ac
   h.context("unsafe");h.pin();
   const content=h.shadow().querySelector(".content");
   assert.equal(content.textContent,"BoldLink");
-  assert.equal(content.querySelectorAll("script, iframe, button, [onclick], [href], [id]").length,0);
+  assert.equal(content.querySelectorAll("script, iframe, button, img, svg, [onclick], [href], [id]").length,0);
 });
 
 test("pin action rejects other senders, edits and a menu opened before navigation", () => {

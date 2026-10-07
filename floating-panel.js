@@ -7,8 +7,8 @@
   const HOST_ID = "cdc-floating-panel";
   const MATH_SELECTOR = "[data-math-source], [data-math-display], .katex-display, .katex, mjx-container, math";
   const MATH_WRAPPER = "[data-math-source], [data-math-display], .katex-display, .katex, .katex-html, mjx-container";
-  const SKIP = new Set(["script", "style", "iframe", "object", "embed", "input", "textarea", "select", "button", "link", "meta", "audio", "video"]);
-  const HTML_TAGS = new Set("a abbr b bdi bdo blockquote br code dd del div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img kbd li mark ol p pre s samp small span strong sub sup table tbody td th thead tr tfoot u ul wbr".split(" "));
+  const SKIP = new Set(["script", "style", "iframe", "object", "embed", "input", "textarea", "select", "button", "link", "meta", "audio", "video", "img", "picture", "canvas"]);
+  const HTML_TAGS = new Set("a abbr b bdi bdo blockquote br code dd del div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i kbd li mark ol p pre s samp small span strong sub sup table tbody td th thead tr tfoot u ul wbr".split(" "));
   const VECTOR_TAGS = new Set("svg g path line rect circle ellipse polygon polyline text tspan".split(" "));
   const MATH_TAGS = new Set("math semantics annotation mrow mi mn mo mtext mspace msub msup msubsup mfrac msqrt mroot munder mover munderover mtable mtr mtd menclose mpadded mphantom".split(" "));
   const TEXT_STYLES = "color font-family font-size font-style font-weight font-variant line-height letter-spacing word-spacing white-space text-decoration text-align direction unicode-bidi vertical-align display".split(" ");
@@ -30,14 +30,6 @@
     return element?.closest("[data-math-source], [data-math-display]") ||
       element?.closest(".katex-display") || element?.closest(".katex, mjx-container, math");
   }
-  function safeImageUrl(value) {
-    try {
-      const url = new URL(value, location.href);
-      return ["https:", "http:", "blob:"].includes(url.protocol) ||
-        /^data:image\/(png|jpeg|gif|webp|avif|bmp);/i.test(value) ? url.href : null;
-    } catch { return null; }
-  }
-
   // A range ending at the start of an equation can intersect its outer span
   // without selecting any equation content. Do not expand that empty boundary.
   function selectedMathContent(source, range) {
@@ -77,7 +69,9 @@
     let copy;
     const svg = source.namespaceURI === "http://www.w3.org/2000/svg";
     const math = source.namespaceURI === "http://www.w3.org/1998/Math/MathML";
-    if (svg && !VECTOR_TAGS.has(tag)) return null;
+    // SVG is retained only as part of a rendered equation (for roots, fences,
+    // and other math symbols). Standalone graphics are outside pinning support.
+    if (svg && (!isMath || !VECTOR_TAGS.has(tag))) return null;
     if (math && !MATH_TAGS.has(tag)) return null;
     copy = document.createElementNS(svg || math ? source.namespaceURI : "http://www.w3.org/1999/xhtml",
       svg || math || HTML_TAGS.has(tag) ? tag : "span");
@@ -120,15 +114,6 @@
         copy.setAttribute(attr.name, attr.value);
       }
     }
-    if (tag === "img") {
-      const src = safeImageUrl(source.currentSrc || source.src);
-      if (!src) return null;
-      copy.src = src;
-      copy.alt = source.alt || "Pinned image";
-      copy.referrerPolicy = "no-referrer";
-      copy.style.width = computed.width;
-      copy.style.height = "auto";
-    }
     if (["td", "th"].includes(tag)) {
       for (const attr of ["colspan", "rowspan"]) if (source.hasAttribute(attr)) copy.setAttribute(attr, source.getAttribute(attr));
     }
@@ -152,20 +137,20 @@
     if (editable(target)) return null;
     const fragment = document.createDocumentFragment();
     const selection = window.getSelection();
-    let source = target.closest("img") || mathRoot(target);
+    let source = mathRoot(target);
     let range = null;
     // A selection inside the right-click target wins over a directly clicked
     // equation, allowing text + several equations to be pinned together.
-    if (!target.closest("img") && selection?.rangeCount && !selection.isCollapsed &&
+    if (selection?.rangeCount && !selection.isCollapsed &&
         selection.containsNode(target, true)) {
       range = selection.getRangeAt(0).cloneRange();
       if (editable(elementOf(range.startContainer)) || editable(elementOf(range.endContainer))) return null;
       source = mathRoot(elementOf(range.commonAncestorContainer)) || elementOf(range.commonAncestorContainer);
     }
-    if (!source) return { error: "Select text, or right-click an equation or image to pin it." };
+    if (!source) return { error: "Select text, or right-click an equation to pin it." };
     try {
       const copy = snapshotNode(source, range, { count: 0 });
-      if (!copy || !(copy.textContent.trim() || copy.matches?.("img, svg") || copy.querySelector?.("img, svg"))) return null;
+      if (!copy || !(copy.textContent.trim() || copy.querySelector?.("svg"))) return null;
       // Display equation wrappers should fit the panel; internal math widths
       // and positioning remain intact, and oversized formulas can scroll.
       if (mathRoot(source)) {
@@ -198,7 +183,6 @@
       max-height:none; overflow:visible; width:max-content; top:0; left:0; }
     .content > :first-child { margin-top:0; }
     .content > :last-child { margin-bottom:0; }
-    .content img { max-width:100%; max-height:360px; height:auto; object-fit:contain; }
     .content pre, .content code { direction:ltr !important; unicode-bidi:isolate; }
     .resize { position:absolute; right:2px; bottom:2px; width:18px; height:18px;
       cursor:nwse-resize; touch-action:none; color:#97979e; }
@@ -367,9 +351,6 @@
     panel.content.scrollLeft = 0;
     panel.manualSize = false;
     fitContent();
-    for (const image of panel.content.querySelectorAll("img")) {
-      image.addEventListener("load", fitContent, { once: true });
-    }
     respond({ ok: true });
   });
   settings.subscribe(() => {

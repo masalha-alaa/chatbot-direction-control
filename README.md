@@ -11,7 +11,7 @@ Features:
 - Change individual chatbot messages between LTR and RTL using the alignment icons below each message.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
-- Pin selected text, whole equations, or images in one draggable, resizable floating reference panel per tab.
+- Pin selected text or whole equations in one draggable, resizable floating reference panel per tab.
 - Middle-click a recent ChatGPT sidebar conversation or a project folder to open it
   in a background tab. Project folders open their project page; conversations inside
   projects are not included. Left-click, right-click, modified clicks, wheel scrolling,
@@ -63,7 +63,7 @@ Floating reference panel
 ------------------------
 
 Select text and right-click **Pin to floating panel**, or right-click an equation
-or image directly. New panels start at the top left, below the page header and
+directly. New panels start at the top left, below the page header and
 beside the narrow navigation rail. The reference stays at the same screen position as you scroll.
 Drag its header to move it, drag the bottom-right corner to resize it, and use the
 header buttons to collapse/expand or close it. Focus the header and use arrow keys
@@ -82,14 +82,13 @@ The new `contextMenus` permission supplies the native right-click entry, limited
 supported chatbot pages. The entry also appears over unselected page content so an
 equation can be pinned without selecting it; using it on plain unselected content
 shows a short hint. Editors and embedded frames are excluded. Content never leaves
-the tab or goes into extension storage. Image copies use the original image URL and
-may request it again from its original host, subject to that site's access rules.
+the tab or goes into extension storage.
 
 Snapshots preserve computed typography and rendered KaTeX math in an isolated shadow
 tree. Only inert presentation markup is copied; scripts, handlers, embedded frames,
 custom elements, and external SVG references are excluded. Oversized selections are
-rejected with a hint. Animated images remain animated; video/canvas capture and
-persistent saved references are outside this feature.
+rejected with a hint. Only text and rendered equations are supported; embedded
+images and standalone graphics are excluded from selections.
 
 Reload the unpacked extension and refresh chatbot tabs to try the new menu.
 
@@ -97,7 +96,7 @@ Browser regression check (development only): install `playwright` and `katex`
 locally with `npm install --no-save --package-lock=false playwright katex`, run
 `npx playwright install chromium`, then `node tests/floating-panel.browser.cjs`.
 The fixture recreates constrained math scrollers and checks complete equations,
-empty selection boundaries, compact sizing, real PNG loading, and panel controls.
+empty selection boundaries, compact sizing, excluded graphics, and panel controls.
 `CDC_CHROMIUM_PATH` may point to an existing Chromium executable.
 
 Composer shortcut behavior
