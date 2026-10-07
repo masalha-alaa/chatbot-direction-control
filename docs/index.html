@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chatbot Direction Control</title>
-  <meta name="description" content="Per-message LTR/RTL controls and paragraph-level composer direction for ChatGPT, Gemini, Claude, and Grok.">
+  <meta name="description" content="LTR/RTL direction controls and floating reference panels for text and equations in ChatGPT, Gemini, Claude, and Grok.">
   <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/masalha-alaa/chatbot-direction-control/master/assets/icon-32x32.png">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -72,6 +72,22 @@
       </div>
     </section>
 
+    <section id="floating-panel" class="section wrap floating-showcase" aria-labelledby="floating-title">
+      <div class="section-heading">
+        <div class="eyebrow">Floating reference panel</div>
+        <h2 id="floating-title">Keep the equation in view</h2>
+        <p>Pin selected text in a floating panel using the right-click context menu. Equations keep their formatting and stay visible while you scroll through the conversation.</p>
+        <p>Move or resize the panel, adjust its font size, or collapse it when you need more space. Available in ChatGPT, Gemini, Claude, and Grok.</p>
+        <p class="floating-enable">Enable <strong>Floating reference panel</strong> in the extension settings, then choose <strong>Pin to floating panel</strong> from the right-click context menu. This feature is off by default.</p>
+      </div>
+      <figure class="floating-screenshot">
+        <a href="assets/screenshot-floating-panel.png" aria-label="View the full-size pinned equation example">
+          <img src="assets/screenshot-floating-panel.png" alt="The quadratic formula in a floating Pinned reference panel, with font-size, collapse and close controls, beside a scrolled worked example" width="2160" height="1200" loading="lazy">
+        </a>
+        <figcaption>A pinned equation stays visible while you scroll through a worked example.</figcaption>
+      </figure>
+    </section>
+
     <section id="settings" class="section wrap settings-showcase" aria-labelledby="settings-title">
       <div class="settings-copy">
         <div class="eyebrow">Settings</div>
@@ -117,7 +133,7 @@
       <div>
         <div class="eyebrow">Privacy</div>
         <h2>Nothing leaves your browser</h2>
-        <p>The extension only needs local browser storage to remember direction choices. It has no analytics, telemetry, accounts, or external data service.</p>
+        <p>Direction choices stay in local browser storage, and pinned content stays in its tab. The extension has no analytics, telemetry, accounts, or external data service.</p>
       </div>
       <a class="button secondary" href="privacy.html">Read the privacy policy</a>
     </section>
