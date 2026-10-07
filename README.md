@@ -2,6 +2,8 @@ Chatbot Direction Control — v1.1.3
 
 Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
+[Visit the website](https://masalha-alaa.github.io/chatbot-direction-control/).
+
 Features:
 
 - Use `Left Ctrl + Left Shift` to set the current composer paragraph to LTR/left-aligned.
@@ -12,10 +14,11 @@ Features:
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
 - Pin selected text or whole equations in one draggable, resizable floating reference panel per tab.
-- Middle-click a recent ChatGPT sidebar conversation or a project folder to open it
-  in a background tab. Project folders open their project page; conversations inside
-  projects are not included. Left-click, right-click, modified clicks, wheel scrolling,
-  and the row's pin/menu/new-chat controls keep their native behavior.
+- Middle-click supported ChatGPT sidebar items to open them in a background tab:
+  New chat, Scheduled, Library, Plugins, recent conversations, and project folders.
+  Project folders open their project page; conversations inside projects are not
+  included. Left-click, right-click, modified clicks, wheel scrolling, and nested
+  row controls such as pin/menu/project-new-chat keep their native behavior.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
 The extension works entirely on your computer. It does not collect, send, upload, or

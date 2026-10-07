@@ -23,7 +23,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== "cdc:open-sidebar-tab") return;
 
   // Accept only our top-level content script, from an opted-in site, and only
-  // a same-origin conversation URL approved by that site's adapter.
+  // a same-origin sidebar destination approved by that site's adapter.
   try {
     if (sender.id !== chrome.runtime.id || sender.frameId !== 0 ||
         !Number.isInteger(sender.tab?.id) || sender.tab.id < 0 ||

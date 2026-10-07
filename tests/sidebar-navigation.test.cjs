@@ -14,6 +14,10 @@ const ORIGIN = "https://chatgpt.com";
 const URL_VALUE = `${ORIGIN}/c/${ID}`;
 const PROJECT_ID = "g-p-0123456789abcdef0123456789abcdef";
 const PROJECT_URL = `${ORIGIN}/g/${PROJECT_ID}/project`;
+const NEW_CHAT_URL = `${ORIGIN}/`;
+const SCHEDULED_URL = `${ORIGIN}/scheduled`;
+const LIBRARY_URL = `${ORIGIN}/library`;
+const PLUGINS_URL = `${ORIGIN}/plugins`;
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 // Sanitized structural fixture based on the live recent/project sidebar DOM
@@ -35,6 +39,18 @@ const row = (id = "recent") => `
   </div>`;
 const fixture = `<!doctype html><html><body>
   <aside><div id="app-shell-sidebar">
+    <nav role="navigation" aria-label="Chat history">
+      <div id="sidebar-header">
+        <button type="button" class="sidebar-item" id="new-chat"><span id="new-chat-title">New chat</span></button>
+      </div>
+      <div data-app-action-sidebar-scroll="">
+        <button type="button" class="sidebar-item" id="scheduled" data-sidebar-destination="builtin:automations"><span id="scheduled-title">Scheduled</span></button>
+        <button type="button" class="sidebar-item" id="library" data-sidebar-destination="builtin:library"><span id="library-title">Library</span></button>
+        <button type="button" class="sidebar-item" id="plugins" data-sidebar-destination="builtin:skills"><span id="plugins-title">Plugins</span></button>
+        <button type="button" class="sidebar-item" id="explore"><span id="explore-title">Explore</span></button>
+        <button type="button" class="sidebar-item" id="unknown-destination" data-sidebar-destination="builtin:unknown"><span id="unknown-destination-title">Unknown</span></button>
+      </div>
+    </nav>
     <div data-sidebar-project-container-id="projects">
       <div data-sidebar-project-container-id="project:${PROJECT_ID}">
         ${projectRow("project-heading")}
@@ -96,9 +112,31 @@ test("recent title and row resolve the exposed ID, never the title", () => {
   }
 });
 
-test("project conversations, section headings, gaps, native links and non-sidebar messages are excluded", () => {
+test("built-in sidebar destinations resolve to their exact routes", () => {
+  const expected = [
+    ["new-chat", NEW_CHAT_URL],
+    ["scheduled", SCHEDULED_URL],
+    ["library", LIBRARY_URL],
+    ["plugins", PLUGINS_URL]
+  ];
+  for (const [id, url] of expected) {
+    for (const suffix of ["", "-title"]) {
+      const h = pageHarness();
+      const target = h.el(id + suffix);
+      const link = h.site.getSidebarConversationLink(target);
+      assert.equal(link.element, h.el(id));
+      assert.equal(link.url, url);
+      assert.equal(h.event("mousedown", target).defaultPrevented, true);
+      assert.equal(h.event("auxclick", target).defaultPrevented, true);
+      assert.equal(h.sent.length, 1);
+      assert.equal(h.sent[0].url, url);
+    }
+  }
+});
+
+test("unsupported built-ins, project conversations, headings, gaps, native links and non-sidebar messages are excluded", () => {
   const h = pageHarness();
-  for (const id of ["project-chat", "project-chat-title", "recents-heading", "empty-space", "native-link", "outside-title", "recent-container", "main"]) {
+  for (const id of ["explore", "explore-title", "unknown-destination", "unknown-destination-title", "project-chat", "project-chat-title", "recents-heading", "empty-space", "native-link", "outside-title", "recent-container", "main"]) {
     assert.equal(h.site.getSidebarConversationLink(h.el(id)), null, id);
     assert.equal(h.event("mousedown", h.el(id)).defaultPrevented, false, id);
     h.event("auxclick", h.el(id));
@@ -272,7 +310,7 @@ function workerHarness(failCreation = false, preferences = { "cdc:settings:chatg
 }
 
 test("worker opens inactive tab in the source window without changing the source", async () => {
-  for (const url of [URL_VALUE, PROJECT_URL]) {
+  for (const url of [URL_VALUE, PROJECT_URL, NEW_CHAT_URL, SCHEDULED_URL, LIBRARY_URL, PLUGINS_URL]) {
     const h = workerHarness();
     assert.equal((await h.request(url)).ok, true);
     assert.deepEqual(JSON.parse(JSON.stringify(h.created)), [{url,active:false,windowId:3,openerTabId:7}]);
@@ -295,7 +333,7 @@ test("worker rejects malformed project routes and unsafe project URLs", async ()
 
 test("worker rejects unsafe URLs and invalid senders", async () => {
   const h = workerHarness();
-  for (const url of ["javascript:alert(1)", "file:///etc/passwd", `https://example.com/c/${ID}`, `${ORIGIN}/settings`, `${URL_VALUE}?x=1`, `${URL_VALUE}#x`, `https://u:p@chatgpt.com/c/${ID}`, `http://chatgpt.com/c/${ID}`, `https://chatgpt.com:8443/c/${ID}`, "/c/"+ID, null]) {
+  for (const url of ["javascript:alert(1)", "file:///etc/passwd", `https://example.com/c/${ID}`, `${ORIGIN}/settings`, `${ORIGIN}/scheduled/`, `${ORIGIN}/library/`, `${ORIGIN}/plugins/`, `${ORIGIN}/plugins/example`, `${URL_VALUE}?x=1`, `${URL_VALUE}#x`, `https://u:p@chatgpt.com/c/${ID}`, `http://chatgpt.com/c/${ID}`, `https://chatgpt.com:8443/c/${ID}`, "/c/"+ID, null]) {
     assert.equal((await h.request(url)).ok, false, String(url));
   }
   for (const sender of [{id:"other-extension"}, {frameId:1}, {tab:undefined}, {tab:{id:-1,windowId:3}}, {url:"https://example.com/"}, {url:"https://gemini.google.com/"}]) {
