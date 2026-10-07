@@ -28,6 +28,10 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
       <span id="wide" data-math-display="true">${wide}</span><textarea id="editor">Private draft</textarea>
       <div id="pair"><span data-math-display="true">${math}</span><span data-math-display="true">${integral}</span></div>
       <div id="wrapped-pair"><div><span data-math-display="true">${math}</span></div><div><span data-math-display="true">${integral}</span></div></div>
+      <section id="boundary-user"><article><p id="last-user">The final response line ends here.</p></article><h2 class="sr-only">You said:</h2><article><p>Next user message.</p></article></section>
+      <section id="boundary-footer"><article><p id="last-footer">Another final response line ends here.</p></article><footer style="user-select:none">ChatGPT can make mistakes. Check important info.</footer><p>Following selectable block.</p></section>
+      <p id="long-text">${'The silver fox crossed the quiet bridge while rain fell over the valley. '.repeat(4)}</p>
+      <p id="long-token">${'abcdefghij'.repeat(20)}</p>
       <div style="height:2400px"></div></body></html>`});
   });
   await page.goto('https://chatgpt.com/c/pin-test');
@@ -35,6 +39,7 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   // Reproduce constrained ChatGPT math scrollers instead of testing only the
   // unconstrained default KaTeX layout.
   await page.addStyleTag({content:'.katex-display { overflow-x:auto; overflow-y:hidden; max-height:34px; } [data-math-display="true"] { display:block; overflow:auto; max-height:48px; }'});
+  await page.addStyleTag({content:'.sr-only {position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;user-select:none;}'});
   await page.evaluate(() => {
     window.roots=new Map(); const attach=Element.prototype.attachShadow;
     Element.prototype.attachShadow=function(options){const shadow=attach.call(this, options);window.roots.set(this,shadow);return shadow;};
@@ -51,6 +56,7 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   await page.addScriptTag({path:path.join(root,'floating-panel.js')});
   await page.evaluate(()=>{context('#eq .mord');pin();});
   const initial=await page.locator('#cdc-floating-panel').boundingBox();
+  const minimumWidth=initial.width;
   assert.equal(initial.x,84,'New panels should start at the top left beside navigation');
   assert.equal(initial.y,56,'New panels should start below the page header');
   assert(await page.evaluate(()=>{const title=panelRoot().querySelector('.title');return title.scrollWidth<=title.clientWidth+1;}),'The full title must fit even with short references');
@@ -110,6 +116,30 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   assert(await page.evaluate(()=>{const title=panelRoot().querySelector('.title');return title.scrollWidth<=title.clientWidth+1;}),'Header width must account for font differences');
   await page.evaluate(()=>{panelRoot().querySelector('.title').style.fontSize='';context('#text');pin();});
   assert((await page.locator('#cdc-floating-panel').boundingBox()).height<120,'Short text must fit without an empty fixed-height panel');
+  const shortHeight=(await page.locator('#cdc-floating-panel').boundingBox()).height;
+  for (const selector of ['#long-text','#long-token']) {
+    await page.evaluate(selector=>{select(selector);context(selector);pin();},selector);
+    const box=await page.locator('#cdc-floating-panel').boundingBox();
+    assert.equal(box.width,minimumWidth,'New long references should default to the header minimum width');
+    assert(box.height>shortHeight,'Wrapped text should increase the panel height');
+    assert(await page.evaluate(()=>{const c=panelRoot().querySelector('.content');return c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1;}),'Long prose and unbroken tokens should wrap without redundant scrollbars');
+  }
+  await page.evaluate(()=>{select('#long-text');context('#long-text');pin();});
+  await page.screenshot({path:path.join(require('node:os').tmpdir(),'cdc-wrapped-reference.png')});
+  for (const [selector,expected] of [['#last-user','The final response line ends here.'],['#last-footer','Another final response line ends here.']]) {
+    await page.locator(selector).click({clickCount:3});
+    assert.equal((await page.evaluate(()=>getSelection().toString())).trim(),expected,'Native triple click should select only the final visible line');
+    await page.evaluate(selector=>{context(selector);pin();},selector);
+    assert.equal((await page.evaluate(()=>panelText())).trim(),expected,'Hidden message labels and unselectable disclaimers must not leak through a triple-click range');
+  }
+  await page.evaluate(()=>{const r=document.createRange();r.setStart(document.querySelector('#last-user').firstChild,0);r.setEnd(document.querySelector('#boundary-user article:last-child p'),0);getSelection().removeAllRanges();getSelection().addRange(r);context('#last-user');pin();});
+  assert.equal((await page.evaluate(()=>panelText())).trim(),'The final response line ends here.','An element boundary before the next message must exclude its text');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('h2').length),0,'Hidden labels should be omitted entirely');
+  await page.evaluate(()=>{const r=document.createRange();r.setStart(document.querySelector('#last-user').firstChild,0);r.setEnd(document.querySelector('#boundary-user article:last-child p').firstChild,0);getSelection().removeAllRanges();getSelection().addRange(r);context('#last-user');pin();});
+  assert.equal((await page.evaluate(()=>panelText())).trim(),'The final response line ends here.','A text boundary at offset zero must also exclude the next message');
+  await page.evaluate(()=>{select('#boundary-user');context('#last-user');pin();});
+  assert.match(await page.evaluate(()=>panelText()),/Next user message/,'An intentional selection of visible content across messages must still work');
+  await page.evaluate(()=>scrollTo(0,0));
   await page.evaluate(()=>{select('#message');context('#text');pin();});
   assert.match(await page.evaluate(()=>panelText()), /silver fox/);
   assert.match(await page.evaluate(()=>panelText()), /forward/);
@@ -149,6 +179,6 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   await page.evaluate(()=>{featureEnabled=false;subscribers.forEach(fn=>fn());});
   assert.equal(await page.locator('#cdc-floating-panel').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS: rendered KaTeX, equation spacing, font scaling/limits/keyboard controls, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
+  console.log('PASS: minimum width/wrapped height, native triple-click boundaries, rendered KaTeX, equation spacing, font scaling/limits/keyboard controls, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

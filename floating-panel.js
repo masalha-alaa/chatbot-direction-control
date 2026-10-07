@@ -52,9 +52,14 @@
     if (++budget.count > MAX_NODES) throw new Error("Selection is too large");
     if (range && !range.intersectsNode(source)) return null;
     if (source.nodeType === Node.TEXT_NODE) {
+      // intersectsNode is inclusive at element boundaries. Check the text's
+      // actual endpoints before copying anything from a following block.
+      if (range && (range.comparePoint(source, 0) > 0 ||
+          range.comparePoint(source, source.textContent.length) < 0)) return null;
       const start = range?.startContainer === source ? range.startOffset : 0;
       const end = range?.endContainer === source ? range.endOffset : source.textContent.length;
-      return document.createTextNode(source.textContent.slice(start, end));
+      const text = source.textContent.slice(start, end);
+      return text ? document.createTextNode(text) : null;
     }
     if (source.nodeType !== Node.ELEMENT_NODE) return null;
     const tag = source.localName;
@@ -76,6 +81,16 @@
     copy = document.createElementNS(svg || math ? source.namespaceURI : "http://www.w3.org/1999/xhtml",
       svg || math || HTML_TAGS.has(tag) ? tag : "span");
     const computed = getComputedStyle(source);
+    if (!isMath) {
+      // A native paragraph selection may cross screen-reader headings or
+      // unselectable page chrome. Those nodes are not part of the visible pin.
+      const clipped = computed.position === "absolute" &&
+        ["hidden", "clip"].includes(computed.overflow) &&
+        parseFloat(computed.width) <= 1 && parseFloat(computed.height) <= 1;
+      if (source.hidden || computed.display === "none" ||
+          ["hidden", "collapse"].includes(computed.visibility) || clipped ||
+          range && computed.userSelect === "none") return null;
+    }
     const wrapper = source.matches(MATH_WRAPPER);
     // Only the inner math layout needs exact dimensions/offsets. Wrapper
     // dimensions and overflow belong to ChatGPT's response column and scroller.
@@ -122,6 +137,8 @@
       const cloned = snapshotNode(child, range, budget, isMath);
       if (cloned) copy.appendChild(cloned);
     }
+    // Do not retain empty layout wrappers at a range's trailing boundary.
+    if (range && !copy.childNodes.length && !["br", "hr"].includes(tag)) return null;
     return copy;
   }
 
@@ -206,6 +223,7 @@
     .content { flex:1; min-height:0; min-width:0; overflow:auto; padding:12px; user-select:text; color-scheme:dark; }
     .measure { position:absolute; visibility:hidden; pointer-events:none; height:auto;
       max-height:none; overflow:visible; width:max-content; top:0; left:0; }
+    .reference { overflow-wrap:anywhere; }
     .reference > :first-child { margin-top:0; }
     .reference > :last-child { margin-bottom:0; }
     .content pre, .content code { direction:ltr !important; unicode-bidi:isolate; }
@@ -244,16 +262,14 @@
   }
   function fitContent() {
     if (!panel || panel.manualSize) return;
-    // Measure an independent inert copy, first at its natural width, then at
-    // the panel width so wrapped text determines the height. No fixed empty area.
+    // Start at the header's minimum width; wrapped text determines the height.
+    // An independent inert copy includes overflow from wide rendered equations.
     const measure = panel.content.cloneNode(true);
     measure.classList.add("measure");
     panel.shadow.appendChild(measure);
     try {
       panel.minimumWidth = measureHeaderWidth();
-      const minimum = Math.min(panel.minimumWidth, innerWidth - GAP * 2);
-      panel.width = clamp(Math.ceil(measure.getBoundingClientRect().width) + 2,
-        minimum, Math.max(minimum, Math.min(480, innerWidth - GAP * 2)));
+      panel.width = Math.min(panel.minimumWidth, innerWidth - GAP * 2);
       measure.style.width = `${panel.width - 2}px`;
       // Include native scrollbar thickness for genuinely oversized formulas.
       // Windows scrollbars consume height; measuring visible overflow alone

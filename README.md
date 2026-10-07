@@ -71,13 +71,16 @@ The arrow button collapses/expands the panel; × closes it. Focus the header and
 to move it with the keyboard; Escape closes it when focus is in the panel.
 
 Pinning another item replaces the same tab's reference and keeps the panel position.
-The panel automatically fits each new reference, up to the available screen space.
+The panel starts each new reference at its minimum width and grows vertically as text
+wraps, up to the available screen space. Long words and URLs also wrap.
 The minimum width includes the full header title and all controls, measured using
 the current font. Manual resizing applies until another item is pinned. Scrollbars appear only when
 the content genuinely exceeds the panel. Selecting part of a rendered equation captures the whole equation;
 selections can include text and multiple equations. Consecutive display equations have
 extra spacing between them, without padding around a single equation. Font adjustments
 persist while the panel is open, including when replacing its reference. Original content is untouched.
+Hidden message labels, unselectable page text and empty selection boundaries are
+excluded, including when triple-clicking the last line of a response.
 A reference stays visible during in-tab conversation navigation, until replaced or
 closed; refreshing the page clears it. Panels are independent across tabs.
 

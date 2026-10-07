@@ -82,7 +82,14 @@ function pageHarness() {
   const el = id => document.getElementById(id);
   const shadow = () => shadows.get(el("cdc-floating-panel"));
   return {document, el, shadow,
-    select(range) { selection={rangeCount:1,isCollapsed:false,containsNode:()=>true,getRangeAt:()=>({cloneRange:()=>range})}; },
+    select(range) {
+      range.comparePoint = (node,offset) => {
+        if (node===range.startContainer && offset<range.startOffset) return -1;
+        if (node===range.endContainer && offset>range.endOffset) return 1;
+        return range.intersectsNode(node) ? 0 : 1;
+      };
+      selection={rangeCount:1,isCollapsed:false,containsNode:()=>true,getRangeAt:()=>({cloneRange:()=>range})};
+    },
     context(id) { el(id).dispatchEvent(new Event("contextmenu",{bubbles:true})); },
     pin(sender="extension") { let response;receiver({type:"cdc:pin-floating-panel"},{id:sender},value=>response=value);return response; },
     disable() {enabled=false; subscriptions.forEach(fn=>fn());},
