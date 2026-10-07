@@ -26,6 +26,8 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
       <p id="tail" dir="rtl">هذه معادلة للاختبار ${second} نهاية النص.</p><span id="integral" data-math-display="true">${integral}</span></article>
       <div id="unsafe"><b onclick="window.failed=1">Safe bold</b><script type="application/json">bad</script><iframe></iframe><button>bad</button><a href="javascript:window.failed=1">safe link</a><img alt="Excluded"><svg><text>Excluded graphic</text></svg></div>
       <span id="wide" data-math-display="true">${wide}</span><textarea id="editor">Private draft</textarea>
+      <div id="pair"><span data-math-display="true">${math}</span><span data-math-display="true">${integral}</span></div>
+      <div id="wrapped-pair"><div><span data-math-display="true">${math}</span></div><div><span data-math-display="true">${integral}</span></div></div>
       <div style="height:2400px"></div></body></html>`});
   });
   await page.goto('https://chatgpt.com/c/pin-test');
@@ -64,12 +66,46 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
     assert(await page.evaluate(()=>{const c=panelRoot().querySelector('.content');return c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1;}),'Fractions, square roots and integrals must fit without scrollbars');
   }
   await page.screenshot({path:path.join(require('node:os').tmpdir(),'cdc-integral-panel.png')});
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('[data-cdc-equation]').style.marginTop),'0px','Single equations keep their compact margins');
+  for (const selector of ['#pair','#wrapped-pair']) {
+    await page.evaluate(selector=>{select(selector);context(selector);pin();},selector);
+    assert.deepEqual(await page.evaluate(()=>[...panelRoot().querySelectorAll('[data-cdc-equation]')].map(e=>e.style.marginTop)),['0px','16px'],'Only the second consecutive equation gets extra spacing, including through wrappers');
+    assert(await page.evaluate(()=>{const [first,second]=[...panelRoot().querySelectorAll('[data-cdc-equation]')].map(e=>e.getBoundingClientRect());return second.top-first.bottom>=15;}),'The equation gap must be visible');
+  }
+  const fontBefore=await page.evaluate(()=>{const p=panelRoot();const atom=p.querySelector('[data-cdc-equation] [aria-hidden]');return {width:atom.getBoundingClientRect().width,title:getComputedStyle(p.querySelector('.title')).fontSize};});
+  for(let i=0;i<5;i++) await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
+  const fontAfter=await page.evaluate(()=>{const p=panelRoot();const atom=p.querySelector('[data-cdc-equation] [aria-hidden]');const c=p.querySelector('.content');return {width:atom.getBoundingClientRect().width,title:getComputedStyle(p.querySelector('.title')).fontSize,fits:c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1};});
+  assert(Math.abs(fontAfter.width/fontBefore.width-1.5)<.02,'Equation glyphs and nested metrics should scale together');
+  assert.equal(fontAfter.title,fontBefore.title,'Font controls should only scale the reference');
+  assert(fontAfter.fits,'Larger fractions and integrals should still fit without clipping or redundant scrollbars');
+  await page.screenshot({path:path.join(require('node:os').tmpdir(),'cdc-equation-spacing-font.png')});
+  await page.evaluate(()=>{getSelection().removeAllRanges();context('#tail .katex-display');pin();});
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.reference').style.zoom),'1.5','Replacing content should keep the font setting');
+  assert(await page.evaluate(()=>{const c=panelRoot().querySelector('.content');return c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1;}),'Larger square roots and fractions should fit');
+  for(let i=0;i<20;i++) await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
+  assert(await page.evaluate(()=>panelRoot().querySelector('.font-larger').disabled),'The upper font limit should disable +');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.reference').style.zoom),'2');
+  for(let i=0;i<20;i++) await page.evaluate(()=>panelRoot().querySelector('.font-smaller').click());
+  assert(await page.evaluate(()=>panelRoot().querySelector('.font-smaller').disabled),'The lower font limit should disable −');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.reference').style.zoom),'0.7');
+  await page.evaluate(()=>panelRoot().querySelector('.font-larger').focus());
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('.reference').style.zoom),'0.8','Font buttons must work from the keyboard');
+  for(let i=0;i<2;i++) await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
   await page.evaluate(()=>{getSelection().removeAllRanges();context('#wide');pin();});
   assert(await page.evaluate(()=>{const c=panelRoot().querySelector('.content');return c.scrollWidth>c.clientWidth&&c.scrollHeight<=c.clientHeight+1;}),'Oversized equations should scroll horizontally without vertically clipping');
+  for(let i=0;i<10;i++) await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
+  assert(await page.evaluate(()=>{const c=panelRoot().querySelector('.content');return c.scrollWidth>c.clientWidth&&c.scrollHeight<=c.clientHeight+1;}),'Oversized equations at 200% should still scroll without vertical clipping');
+  for(let i=0;i<10;i++) await page.evaluate(()=>panelRoot().querySelector('.font-smaller').click());
   await page.evaluate(()=>{const r=document.createRange();r.setStart(document.querySelector('#text').firstChild,0);r.setEnd(document.querySelector('#eq'),0);getSelection().removeAllRanges();getSelection().addRange(r);context('#text');pin();});
   assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('[data-cdc-equation]').length),0,'An empty equation boundary must not add equation fragments');
   await page.evaluate(()=>{select('#text',4,10);context('#text');pin();});
   assert.equal(await page.evaluate(()=>panelText()),'silver');
+  const textWidth=await page.evaluate(()=>{const r=document.createRange();r.selectNodeContents(panelRoot().querySelector('.reference').firstChild);return r.getBoundingClientRect().width;});
+  await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
+  assert(await page.evaluate(()=>{const c=panelRoot().querySelector('.content');return c.scrollHeight<=c.clientHeight+1;}),'Enlarged text must refit');
+  assert((await page.evaluate(()=>{const r=document.createRange();r.selectNodeContents(panelRoot().querySelector('.reference').firstChild);return r.getBoundingClientRect().width;}))>textWidth,'Text should grow with +');
+  await page.evaluate(()=>panelRoot().querySelector('.font-smaller').click());
   await page.evaluate(()=>{panelRoot().querySelector('.title').style.fontSize='18px';context('#text');pin();});
   assert(await page.evaluate(()=>{const title=panelRoot().querySelector('.title');return title.scrollWidth<=title.clientWidth+1;}),'Header width must account for font differences');
   await page.evaluate(()=>{panelRoot().querySelector('.title').style.fontSize='';context('#text');pin();});
@@ -78,6 +114,10 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   assert.match(await page.evaluate(()=>panelText()), /silver fox/);
   assert.match(await page.evaluate(()=>panelText()), /forward/);
   assert.match(await page.evaluate(()=>panelText()), /نهاية النص/);
+  assert(await page.evaluate(()=>[...panelRoot().querySelectorAll('[data-cdc-equation="display"]')].every(e=>e.style.marginTop==='0px')),'Text between equations should retain its original paragraph spacing');
+  await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
+  assert(await page.evaluate(()=>{const c=panelRoot().querySelector('.content');return c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1;}),'Mixed enlarged text and equations should wrap and fit');
+  await page.evaluate(()=>panelRoot().querySelector('.font-smaller').click());
   assert.equal(await page.locator('#cdc-floating-panel').count(),1);
   const before=await page.locator('#cdc-floating-panel').boundingBox();
   await page.evaluate(()=>scrollTo(0,700));
@@ -88,6 +128,11 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   assert(dragged.x<after.x);assert(dragged.y>after.y);
   await page.mouse.move(dragged.x+dragged.width-8,dragged.y+dragged.height-8);await page.mouse.down();await page.mouse.move(dragged.x+dragged.width+50,dragged.y+dragged.height+40);await page.mouse.up();
   const resized=await page.locator('#cdc-floating-panel').boundingBox();assert(resized.width>dragged.width);assert(resized.height>dragged.height);
+  await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
+  const adjusted=await page.locator('#cdc-floating-panel').boundingBox();
+  assert.equal(adjusted.width,resized.width,'Font adjustments should respect manual panel width');
+  assert.equal(adjusted.height,resized.height,'Font adjustments should respect manual panel height');
+  await page.evaluate(()=>panelRoot().querySelector('.font-smaller').click());
   await page.evaluate(()=>panelRoot().querySelector('.collapse').click());
   assert.equal((await page.locator('#cdc-floating-panel').boundingBox()).height,40);
   await page.evaluate(()=>{select('#text',4,10);context('#text');pin();});
@@ -104,6 +149,6 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   await page.evaluate(()=>{featureEnabled=false;subscribers.forEach(fn=>fn());});
   assert.equal(await page.locator('#cdc-floating-panel').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS: rendered KaTeX, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
+  console.log('PASS: rendered KaTeX, equation spacing, font scaling/limits/keyboard controls, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

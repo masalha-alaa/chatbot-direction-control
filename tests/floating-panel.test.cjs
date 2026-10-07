@@ -97,10 +97,10 @@ test("a partially selected equation stays whole, copies typography and survives 
   assert.equal(h.pin().ok,true);
   const content = h.shadow().querySelector(".content");
   assert.equal(content.textContent,"a1 + g");
-  assert.equal(content.firstChild.style.fontFamily,"TestMath");
+  assert.equal(content.querySelector("[data-cdc-equation]").style.fontFamily,"TestMath");
   assert.equal(content.querySelectorAll("[id]").length,0);
   assert.equal(content.querySelectorAll("math").length,0,"hidden MathML must not leak out of its original clipping CSS");
-  assert.equal(content.firstChild.getAttribute("aria-label"),"a_1+g");
+  assert.equal(content.querySelector("[data-cdc-equation]").getAttribute("aria-label"),"a_1+g");
 });
 
 test("a selection ending on an empty equation boundary does not expand unselected math", () => {

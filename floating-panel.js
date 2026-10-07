@@ -133,6 +133,26 @@
     return matchMedia("(prefers-color-scheme: dark)").matches ? "#212121" : "#ffffff";
   }
 
+  function spaceEquations(root) {
+    // Only consecutive display equations get a gap. Ignore whitespace and
+    // layout wrappers, but keep ordinary text and inline math spacing intact.
+    let previous = false;
+    function visit(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (node.textContent.trim()) previous = false;
+        return;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("data-cdc-equation")) {
+        const display = node.getAttribute("data-cdc-equation") === "display";
+        if (display && previous) node.style.marginTop = "16px";
+        previous = display;
+        return;
+      }
+      for (const child of node.childNodes) visit(child);
+    }
+    visit(root);
+  }
+
   function capture(target) {
     if (editable(target)) return null;
     const fragment = document.createDocumentFragment();
@@ -158,6 +178,7 @@
         copy.style.unicodeBidi = "isolate";
       }
       fragment.appendChild(copy);
+      spaceEquations(fragment);
       return { fragment, background: backdrop(source), color: getComputedStyle(source).color };
     } catch {
       return { error: "This selection is too large. Select a smaller section." };
@@ -177,12 +198,16 @@
     button { font:20px/1 system-ui; display:grid; place-items:center; width:28px; height:28px;
       flex:0 0 28px; padding:0; border:0; border-radius:6px; color:inherit; background:transparent; cursor:pointer; }
     button:hover { background:#ffffff20; }
+    button:disabled { opacity:.35; cursor:default; }
+    button:disabled:hover { background:transparent; }
+    .font-controls { display:flex; gap:0; flex:none; }
+    .font-controls button { width:24px; flex-basis:24px; font-size:18px; }
     button:focus-visible, header:focus-visible { outline:2px solid #aab8ff; outline-offset:-2px; }
     .content { flex:1; min-height:0; min-width:0; overflow:auto; padding:12px; user-select:text; color-scheme:dark; }
     .measure { position:absolute; visibility:hidden; pointer-events:none; height:auto;
       max-height:none; overflow:visible; width:max-content; top:0; left:0; }
-    .content > :first-child { margin-top:0; }
-    .content > :last-child { margin-bottom:0; }
+    .reference > :first-child { margin-top:0; }
+    .reference > :last-child { margin-bottom:0; }
     .content pre, .content code { direction:ltr !important; unicode-bidi:isolate; }
     .resize { position:absolute; right:2px; bottom:2px; width:18px; height:18px;
       cursor:nwse-resize; touch-action:none; color:#97979e; }
@@ -197,9 +222,19 @@
     panel = null;
   }
   function clamp(value, min, max) { return Math.max(min, Math.min(value, max)); }
+  function adjustFont(change) {
+    panel.fontPercent = clamp(panel.fontPercent + change, 70, 200);
+    // Layout-aware zoom scales the saved pixel metrics together, including
+    // KaTeX's fraction bars, subscripts and SVG roots. Text still wraps normally.
+    panel.reference.style.zoom = String(panel.fontPercent / 100);
+    panel.shell.querySelector(".font-smaller").disabled = panel.fontPercent === 70;
+    panel.shell.querySelector(".font-larger").disabled = panel.fontPercent === 200;
+    panel.shell.querySelector(".font-controls").setAttribute("aria-label", `Reference font size: ${panel.fontPercent}%`);
+    fitContent();
+  }
   function measureHeaderWidth() {
     const header = panel.shell.querySelector("header").cloneNode(true);
-    // Measure the whole title and both controls at the panel's actual font.
+    // Measure the whole title and all controls at the panel's actual font.
     // A fixed minimum misses small font/platform differences and cuts the title.
     Object.assign(header.style, { position: "absolute", visibility: "hidden",
       width: "max-content", pointerEvents: "none", font: getComputedStyle(panel.shell).font });
@@ -279,18 +314,20 @@
     shell.className = "panel";
     shell.setAttribute("role", "dialog");
     shell.setAttribute("aria-label", "Pinned reference");
-    shell.innerHTML = '<header tabindex="0" aria-label="Move pinned reference using arrow keys"><span class="title">Pinned reference</span><button type="button" class="collapse" aria-label="Collapse panel" aria-expanded="true" title="Collapse">−</button><button type="button" class="close" aria-label="Close panel" title="Close">×</button></header><div class="content"></div><div class="resize" title="Resize panel"></div>';
+    shell.innerHTML = '<header tabindex="0" aria-label="Move pinned reference using arrow keys"><span class="title">Pinned reference</span><div class="font-controls" role="group" aria-label="Reference font size: 100%"><button type="button" class="font-smaller" aria-label="Decrease font size" title="Decrease font size">−</button><button type="button" class="font-larger" aria-label="Increase font size" title="Increase font size">+</button></div><button type="button" class="collapse" aria-label="Collapse panel" aria-expanded="true" title="Collapse">▾</button><button type="button" class="close" aria-label="Close panel" title="Close">×</button></header><div class="content"><div class="reference"></div></div><div class="resize" title="Resize panel"></div>';
     shadow.appendChild(shell);
     document.documentElement.appendChild(host);
-    panel = { host, shadow, shell, content: shell.querySelector(".content"), collapsed: false,
+    panel = { host, shadow, shell, content: shell.querySelector(".content"), reference: shell.querySelector(".reference"), fontPercent: 100, collapsed: false,
       manualSize: false, minimumWidth: 220, width: 380, height: 100, ...INITIAL_POSITION };
     const header = shell.querySelector("header");
     const collapse = shell.querySelector(".collapse");
+    shell.querySelector(".font-smaller").addEventListener("click", () => adjustFont(-10));
+    shell.querySelector(".font-larger").addEventListener("click", () => adjustFont(10));
     shell.querySelector(".close").addEventListener("click", closePanel);
     collapse.addEventListener("click", () => {
       panel.collapsed = !panel.collapsed;
       shell.classList.toggle("collapsed", panel.collapsed);
-      collapse.textContent = panel.collapsed ? "+" : "−";
+      collapse.textContent = panel.collapsed ? "▸" : "▾";
       collapse.title = panel.collapsed ? "Expand" : "Collapse";
       collapse.setAttribute("aria-label", `${collapse.title} panel`);
       collapse.setAttribute("aria-expanded", String(!panel.collapsed));
@@ -342,11 +379,11 @@
     const collapse = panel.shell.querySelector(".collapse");
     panel.collapsed = false;
     panel.shell.classList.remove("collapsed");
-    collapse.textContent = "−"; collapse.title = "Collapse";
+    collapse.textContent = "▾"; collapse.title = "Collapse";
     collapse.setAttribute("aria-label", "Collapse panel"); collapse.setAttribute("aria-expanded", "true");
     panel.content.style.background = pending.background;
     panel.content.style.color = pending.color;
-    panel.content.replaceChildren(pending.fragment.cloneNode(true));
+    panel.reference.replaceChildren(pending.fragment.cloneNode(true));
     panel.content.scrollTop = 0;
     panel.content.scrollLeft = 0;
     panel.manualSize = false;

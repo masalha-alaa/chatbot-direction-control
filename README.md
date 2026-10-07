@@ -66,15 +66,18 @@ Select text and right-click **Pin to floating panel**, or right-click an equatio
 directly. New panels start at the top left, below the page header and
 beside the narrow navigation rail. The reference stays at the same screen position as you scroll.
 Drag its header to move it, drag the bottom-right corner to resize it, and use the
-header buttons to collapse/expand or close it. Focus the header and use arrow keys
+header − / + buttons to adjust reference text and equation sizes (70–200%, in 10% steps).
+The arrow button collapses/expands the panel; × closes it. Focus the header and use arrow keys
 to move it with the keyboard; Escape closes it when focus is in the panel.
 
 Pinning another item replaces the same tab's reference and keeps the panel position.
 The panel automatically fits each new reference, up to the available screen space.
-The minimum width includes the full header title and both controls, measured using
+The minimum width includes the full header title and all controls, measured using
 the current font. Manual resizing applies until another item is pinned. Scrollbars appear only when
 the content genuinely exceeds the panel. Selecting part of a rendered equation captures the whole equation;
-selections can include text and multiple equations. Original content is untouched.
+selections can include text and multiple equations. Consecutive display equations have
+extra spacing between them, without padding around a single equation. Font adjustments
+persist while the panel is open, including when replacing its reference. Original content is untouched.
 A reference stays visible during in-tab conversation navigation, until replaced or
 closed; refreshing the page clears it. Panels are independent across tabs.
 
