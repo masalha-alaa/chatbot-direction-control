@@ -88,7 +88,7 @@ function pageHarness(hostname = "chatgpt.com", enabled = true) {
     } },
     chrome: { runtime: { sendMessage: async message => { sent.push(message); return { ok: true }; } } }
   });
-  for (const script of ["site-adapter-registry.js", "adapters/chatgpt.js", "adapters/gemini.js", "adapters/claude.js", "adapters/grok.js", "sidebar-navigation.js"]) {
+  for (const script of ["src/shared/site-adapter-registry.js", "src/adapters/chatgpt.js", "src/adapters/gemini.js", "src/adapters/claude.js", "src/adapters/grok.js", "src/content/sidebar-navigation.js"]) {
     vm.runInContext(read(script), context, { filename: script });
   }
   const site = context.ChatDirectionControl.getCurrentSiteAdapter(location);
@@ -300,8 +300,11 @@ function workerHarness(failCreation = false, preferences = { "cdc:settings:chatg
       created.push(options); return {id:99};
     } }
   } });
-  context.importScripts = (...files) => files.forEach(file => vm.runInContext(read(file), context, {filename:file}));
-  vm.runInContext(read("background.js"), context);
+  context.importScripts = (...files) => files.forEach(file => {
+    const resolved = path.join(path.dirname("src/background/background.js"), file);
+    vm.runInContext(read(resolved), context, {filename:resolved});
+  });
+  vm.runInContext(read("src/background/background.js"), context);
   const sender = {id:"extension-id",frameId:0,url:`${ORIGIN}/`,tab:{id:7,windowId:3}};
   const request = (url = URL_VALUE, overrides = {}) => new Promise(resolve => {
     onMessage({type:"cdc:open-sidebar-tab",url}, {...sender,...overrides}, resolve);
@@ -362,9 +365,9 @@ test("manifest includes the worker/controllers, release version and required per
   const manifest = JSON.parse(read("manifest.json"));
   assert.equal(manifest.version, "1.1.3");
   assert.deepEqual(manifest.permissions, ["storage", "contextMenus"]);
-  assert.equal(manifest.background.service_worker, "background.js");
-  assert(manifest.content_scripts[0].js.includes("sidebar-navigation.js"));
-  assert(manifest.content_scripts[0].js.includes("floating-panel.js"));
+  assert.equal(manifest.background.service_worker, "src/background/background.js");
+  assert(manifest.content_scripts[0].js.includes("src/content/sidebar-navigation.js"));
+  assert(manifest.content_scripts[0].js.includes("src/content/floating-panel.js"));
   for (const script of manifest.content_scripts[0].js) assert(fs.existsSync(path.join(root,script)));
 });
 

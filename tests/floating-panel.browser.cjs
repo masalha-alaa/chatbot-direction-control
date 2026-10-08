@@ -53,7 +53,7 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
     window.context=selector=>document.querySelector(selector).dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,composed:true,button:2}));
     window.panelText=()=>window.panelRoot().querySelector('.content').textContent;
   });
-  await page.addScriptTag({path:path.join(root,'floating-panel.js')});
+  await page.addScriptTag({path:path.join(root,'src/content/floating-panel.js')});
   await page.evaluate(()=>{context('#eq .mord');pin();});
   const initial=await page.locator('#cdc-floating-panel').boundingBox();
   const minimumWidth=initial.width;

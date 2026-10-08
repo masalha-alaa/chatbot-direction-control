@@ -25,7 +25,7 @@ function workerHarness(preferences = {}) {
     },
     tabs: { sendMessage: async (...args) => { routed.push(args); } }
   } });
-  for (const file of ["settings.js", "site-adapter-registry.js", "adapters/chatgpt.js", "adapters/gemini.js", "adapters/claude.js", "adapters/grok.js", "floating-panel-background.js"]) run(context, file);
+  for (const file of ["src/shared/settings.js", "src/shared/site-adapter-registry.js", "src/adapters/chatgpt.js", "src/adapters/gemini.js", "src/adapters/claude.js", "src/adapters/grok.js", "src/background/floating-panel-background.js"]) run(context, file);
   return { menus, routed, store, settings: context.ChatDirectionSettings, click: (...args) => click(...args) };
 }
 
@@ -85,7 +85,7 @@ function pageHarness() {
     ChatDirectionSettings: { enabled: () => enabled, subscribe: fn => subscriptions.push(fn) },
     chrome: { runtime: { id:"extension", onMessage: {addListener(fn) {receiver=fn;}} } }
   });
-  run(context, "floating-panel.js");
+  run(context, "src/content/floating-panel.js");
   const el = id => document.getElementById(id);
   const shadow = () => shadows.get(el("cdc-floating-panel"));
   return {document, el, shadow,

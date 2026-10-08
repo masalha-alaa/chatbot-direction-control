@@ -121,22 +121,26 @@ extension deliberately leaves its `Ctrl + Shift` handling untouched.
 Architecture
 ------------
 
-The extension separates generic behavior from chatbot-specific DOM knowledge:
+Source files live under `src/`: `shared/` holds settings and adapter infrastructure,
+`adapters/` holds chatbot-specific DOM knowledge, `content/` holds page features and
+styles, and `background/` holds the service worker and context-menu handling.
+The popup UI stays in `popup/`, website files in `docs/`, and test fixtures in `tests/`.
 
-- `site-adapter-registry.js`: adapter registration, validation, and shared DOM helpers.
-- `adapters/chatgpt.js`: ChatGPT selectors and DOM behavior.
-- `adapters/gemini.js`: Gemini selectors and DOM behavior.
-- `adapters/claude.js`: Claude selectors and DOM behavior.
-- `adapters/grok.js`: Grok selectors and DOM behavior.
-- `composer-direction.js`: generic composer shortcut handling for adapters that opt in.
-- `response-direction.js`: generic per-message controls, persistence, and DOM observation.
-- `sidebar-navigation.js`: opt-in, generic middle-click handling for sidebar conversations and project folders.
-- `background.js`: validates tab-opening requests and opens an inactive tab in the source window.
-- `floating-panel-background.js`: registers the native context menu and routes pin actions to the source tab.
-- `floating-panel.js`: captures inert formatted references and manages the isolated floating panel.
-- `styles.css`: shared direction/button styling.
+- `src/shared/settings.js`: shared preference cache and storage-change subscriptions.
+- `src/shared/site-adapter-registry.js`: adapter registration, validation, and shared DOM helpers.
+- `src/adapters/chatgpt.js`: ChatGPT selectors and DOM behavior.
+- `src/adapters/gemini.js`: Gemini selectors and DOM behavior.
+- `src/adapters/claude.js`: Claude selectors and DOM behavior.
+- `src/adapters/grok.js`: Grok selectors and DOM behavior.
+- `src/content/composer-direction.js`: generic composer shortcut handling for adapters that opt in.
+- `src/content/response-direction.js`: generic per-message controls, persistence, and DOM observation.
+- `src/content/sidebar-navigation.js`: opt-in, generic middle-click handling for sidebar conversations and project folders.
+- `src/background/background.js`: validates tab-opening requests and opens an inactive tab in the source window.
+- `src/background/floating-panel-background.js`: registers the native context menu and routes pin actions to the source tab.
+- `src/content/floating-panel.js`: captures inert formatted references and manages the isolated floating panel.
+- `src/content/styles.css`: shared direction/button styling.
 
-`composer-direction.js` and `response-direction.js` contain no chatbot host checks.
+`src/content/composer-direction.js` and `src/content/response-direction.js` contain no chatbot host checks.
 They only call the active adapter through the registry.
 
 For composer direction, an adapter opts into custom paragraph handling by implementing
@@ -182,15 +186,15 @@ Adding another chatbot
 ----------------------
 
 1. Add its URL pattern to `manifest.json`.
-2. Add a new file under `adapters/` for the chatbot.
+2. Add a new file under `src/adapters/` for the chatbot.
 3. Register one adapter from that file with `ChatDirectionControl.registerAdapter(...)`.
 4. Add the adapter file to the manifest before the generic controller scripts, and to
-   `background.js` if it opts into sidebar navigation.
+   `src/background/background.js` if it opts into sidebar navigation.
 5. Only implement `getComposerTextBlocks(editor)` if the site's native composer shortcut
    behavior needs to be replaced.
 
-No host-specific condition should be added to `composer-direction.js` or
-`response-direction.js`, `sidebar-navigation.js`, or `background.js`.
+No host-specific condition should be added to `src/content/composer-direction.js` or
+`src/content/response-direction.js`, `src/content/sidebar-navigation.js`, or `src/background/background.js`.
 
 Local test:
 

@@ -3,12 +3,12 @@
 // Adapters register without touching the DOM until a DOM hook is called.
 // Reuse their pure URL policies so the tab service contains no host checks.
 importScripts(
-  "settings.js",
-  "site-adapter-registry.js",
-  "adapters/chatgpt.js",
-  "adapters/gemini.js",
-  "adapters/claude.js",
-  "adapters/grok.js",
+  "../shared/settings.js",
+  "../shared/site-adapter-registry.js",
+  "../adapters/chatgpt.js",
+  "../adapters/gemini.js",
+  "../adapters/claude.js",
+  "../adapters/grok.js",
   "floating-panel-background.js"
 );
 

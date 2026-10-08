@@ -14,14 +14,14 @@ function harness(html, store = storageHarness()) {
     MutationObserver: class { observe() {} }, setTimeout() {}, clearTimeout() {}
   });
   const run = file => vm.runInContext(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), context, { filename: file });
-  run("site-adapter-registry.js"); run("adapters/gemini.js");
+  run("src/shared/site-adapter-registry.js"); run("src/adapters/gemini.js");
   const site = context.ChatDirectionControl.getCurrentSiteAdapter();
   const messages = Object.fromEntries(site.getMessages().map(message => [site.getRole(message), message]));
   const target = role => site.getDirectionTarget(messages[role], role);
   const bar = role => site.findActionBar(site.getTurn(messages[role]), role);
   return { document, site, messages, target, bar, store,
     get settings() { return context.ChatDirectionSettings; },
-    async start() { run("settings.js"); run("response-direction.js"); await flush(); },
+    async start() { run("src/shared/settings.js"); run("src/content/response-direction.js"); await flush(); },
     async click(role, mode) { bar(role).querySelector(`[data-mode="${mode}"]`).dispatchEvent(new Event("click")); await flush(); }
   };
 }

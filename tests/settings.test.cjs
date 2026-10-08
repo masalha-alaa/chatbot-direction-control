@@ -10,7 +10,7 @@ const run = (context, file) => vm.runInContext(read(file), context, { filename: 
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 function settingsContext(store, extra = {}) {
   const context = vm.createContext({ console, ...extra, chrome: { storage: store.storage, runtime: { getManifest: () => ({ version: "1.1.2" }) } } });
-  run(context, "settings.js");
+  run(context, "src/shared/settings.js");
   return context;
 }
 
@@ -117,7 +117,7 @@ for (const siteId of ["chatgpt", "claude", "gemini", "grok"]) {
     const key = `cgpt-direction|https://test.example/${siteId}|site:u`;
     const store = storageHarness({ [key]: "rtl" });
     const h = pageContext(siteId, store);
-    run(h.context, "response-direction.js");
+    run(h.context, "src/content/response-direction.js");
     await flush();
     const message = h.document.getElementById("u");
     assert.equal(message.dataset.cgptDirection, "rtl");
@@ -140,7 +140,7 @@ for (const siteId of ["chatgpt", "claude", "gemini", "grok"]) {
     h.rescan(); await flush();
     assert.equal(message.dataset.cgptDirection, "ltr", "current-page choice survives rerender");
     const reload = pageContext(siteId, store);
-    run(reload.context, "response-direction.js"); await flush();
+    run(reload.context, "src/content/response-direction.js"); await flush();
     assert.equal(reload.document.getElementById("u").dataset.cgptDirection, undefined, "remember-off does not recover");
     await reload.settings.set(`${siteId}.rememberAlignment`, true); await flush();
     assert.equal(reload.document.getElementById("u").dataset.cgptDirection, "rtl");
@@ -157,7 +157,7 @@ test("late saved alignment cannot overwrite a click or re-enable a disabled role
     let release;
     const get = store.storage.local.get;
     store.storage.local.get = keys => typeof keys === "string" && keys.endsWith("site:u") ? new Promise(resolve => { release = resolve; }) : get(keys);
-    run(h.context, "response-direction.js"); await flush();
+    run(h.context, "src/content/response-direction.js"); await flush();
     if (action === "click") h.document.querySelector('#u [data-mode="ltr"]').dispatchEvent(new h.Event("click"));
     else await h.settings.set("chatgpt.user", false);
     release({ "cgpt-direction|https://test.example/chatgpt|site:u": "rtl" }); await flush();
@@ -170,7 +170,7 @@ for (const siteId of ["chatgpt", "claude", "grok", "gemini"]) {
     const h = pageContext(siteId, storageHarness());
     const editor = h.document.getElementById("editor");
     Object.defineProperty(editor, "isContentEditable", { value: true });
-    run(h.context, "composer-direction.js"); await flush();
+    run(h.context, "src/content/composer-direction.js"); await flush();
     const key = (type, code) => {
       const event = new h.Event(type, { cancelable: true });
       event.code = code; h.document.dispatchEvent(event); return event;
@@ -197,10 +197,10 @@ test("actual ChatGPT punctuation hook respects a saved opt-out and restores text
   const h = pageContext("chatgpt", storageHarness({ "cdc:settings:chatgpt.rtlPunctuation": false }));
   let adapter;
   h.context.ChatDirectionControl = { dom: {}, registerAdapter: value => { adapter = value; } };
-  run(h.context, "adapters/chatgpt.js");
+  run(h.context, "src/adapters/chatgpt.js");
   h.context.ChatDirectionControl = { getCurrentSiteAdapter: () => h.site };
   h.site.onDirectionModeApplied = adapter.onDirectionModeApplied;
-  run(h.context, "response-direction.js"); await flush();
+  run(h.context, "src/content/response-direction.js"); await flush();
   h.document.querySelector('#u [data-mode="rtl"]').dispatchEvent(new h.Event("click")); await flush();
   const target = h.document.querySelector("#u .text");
   assert.equal(target.querySelector("[data-cdc-bidi-punct]"), null);

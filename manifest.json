@@ -14,7 +14,7 @@
     "contextMenus"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background/background.js"
   },
   "content_scripts": [
     {
@@ -25,19 +25,19 @@
         "https://grok.com/*"
       ],
       "js": [
-        "settings.js",
-        "site-adapter-registry.js",
-        "adapters/chatgpt.js",
-        "adapters/gemini.js",
-        "adapters/claude.js",
-        "adapters/grok.js",
-        "composer-direction.js",
-        "response-direction.js",
-        "sidebar-navigation.js",
-        "floating-panel.js"
+        "src/shared/settings.js",
+        "src/shared/site-adapter-registry.js",
+        "src/adapters/chatgpt.js",
+        "src/adapters/gemini.js",
+        "src/adapters/claude.js",
+        "src/adapters/grok.js",
+        "src/content/composer-direction.js",
+        "src/content/response-direction.js",
+        "src/content/sidebar-navigation.js",
+        "src/content/floating-panel.js"
       ],
       "css": [
-        "styles.css"
+        "src/content/styles.css"
       ],
       "run_at": "document_idle"
     }

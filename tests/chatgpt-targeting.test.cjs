@@ -38,12 +38,12 @@ function harness(html, store = storageHarness()) {
     setTimeout() {}, clearTimeout() {}
   });
   const run = file => vm.runInContext(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), context, { filename: file });
-  run("site-adapter-registry.js");
-  run("adapters/chatgpt.js");
+  run("src/shared/site-adapter-registry.js");
+  run("src/adapters/chatgpt.js");
   const site = context.ChatDirectionControl.getCurrentSiteAdapter();
   const get = id => document.getElementById(id);
   return { document, site, get, store,
-    async start() { run("settings.js"); run("response-direction.js"); await flush(); },
+    async start() { run("src/shared/settings.js"); run("src/content/response-direction.js"); await flush(); },
     async click(id, mode) { get(id).querySelector(`[data-mode="${mode}"]`).dispatchEvent(new Event("click")); await flush(); },
     get settings() { return context.ChatDirectionSettings; }
   };
