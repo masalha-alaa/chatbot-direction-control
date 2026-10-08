@@ -30,6 +30,15 @@
   const PROJECT_ID_PATTERN = "g-p-[0-9a-f]{32}";
   const PROJECT_ID_REGEXP = new RegExp(`^${PROJECT_ID_PATTERN}$`, "i");
   const PROJECT_PATH_PATTERN = new RegExp(`^/g/${PROJECT_ID_PATTERN}/project$`, "i");
+  const SIDEBAR_DESTINATION_ATTRIBUTE = "data-sidebar-destination";
+  const SIDEBAR_DESTINATION_PATHS = Object.freeze({
+    "builtin:automations": "/scheduled",
+    "builtin:library": "/library",
+    "builtin:skills": "/plugins"
+  });
+  const STATIC_SIDEBAR_PATHS = new Set([
+    "/", ...Object.values(SIDEBAR_DESTINATION_PATHS)
+  ]);
 
   // Markup used by the optional RTL <bdi> trailing-punctuation correction.
   const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
@@ -163,13 +172,16 @@
 
     /**
      * Recent chats expose a conversation key on their surrounding list item;
-     * project folders expose a project ID directly on their row. Conversations
-     * inside projects still lack an exposed ID and remain unsupported.
-     * This hook is queried only on mouse events, with no observers or polling.
+     * project folders expose a project ID directly on their row; built-in
+     * destinations expose data-sidebar-destination. New chat is the only
+     * sidebar-item button in the navigation header above the scroll container.
+     * Conversations inside projects still lack an exposed ID and remain
+     * unsupported. This hook is queried only on mouse events, with no observers
+     * or polling.
      */
     getSidebarConversationLink(target) {
       if (!(target instanceof Element)) return null;
-      const row = target.closest('.sidebar-item[role="button"]');
+      const row = target.closest(".sidebar-item");
       if (!row?.closest("#app-shell-sidebar")) return null;
 
       // Menu, pin, rename inputs, and any other nested controls retain their
@@ -178,6 +190,26 @@
         'button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="menuitem"]'
       );
       if (control !== row || row.getAttribute("aria-disabled") === "true") return null;
+
+      // Current ChatGPT built-ins expose stable semantic destination IDs.
+      // Map only the explicitly supported entries; unknown built-ins fail closed.
+      const destination = row.getAttribute(SIDEBAR_DESTINATION_ATTRIBUTE);
+      if (destination) {
+        const path = SIDEBAR_DESTINATION_PATHS[destination];
+        if (!path) return null;
+        return { element: row, url: new URL(path, location.origin).href };
+      }
+
+      // New chat currently has no destination attribute. It is structurally
+      // separated from the scrollable navigation entries, so identify it without
+      // relying on localized visible text or generated CSS class names.
+      if (
+        row.tagName === "BUTTON" &&
+        row.closest('nav[role="navigation"]') &&
+        !row.closest("[data-app-action-sidebar-scroll]")
+      ) {
+        return { element: row, url: new URL("/", location.origin).href };
+      }
 
       // Live project-folder DOM verified on 2026-09-23. Read the ID only from
       // the folder row, never an ancestor of a nested project conversation.
@@ -204,7 +236,9 @@
       return url.protocol === "https:" &&
         url.hostname === "chatgpt.com" &&
         !url.port && !url.username && !url.password && !url.search && !url.hash &&
-        (CONVERSATION_PATH_PATTERN.test(url.pathname) || PROJECT_PATH_PATTERN.test(url.pathname));
+        (STATIC_SIDEBAR_PATHS.has(url.pathname) ||
+          CONVERSATION_PATH_PATTERN.test(url.pathname) ||
+          PROJECT_PATH_PATTERN.test(url.pathname));
     },
 
     findComposerEditor(activeElement) {

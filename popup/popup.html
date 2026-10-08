@@ -49,13 +49,13 @@
 <input class="switch" type="checkbox" role="switch" id="chatgpt-rememberAlignment" data-site="chatgpt" data-key="rememberAlignment" aria-describedby="chatgpt-rememberAlignment-help chatgpt-rememberAlignment-details" checked>
 <span class="sr-only" id="chatgpt-rememberAlignment-details">Save each message’s alignment and restore it when you reload the page</span>
 </label>
-<label title="Change the direction of the current paragraph or selected paragraphs using Left Ctrl + Shift (LTR) or Right Ctrl + Shift (RTL)" class="setting" for="chatgpt-composer">
+<label title="Change the direction of the current paragraph or selected paragraphs using Left/Right Ctrl+Shift" class="setting" for="chatgpt-composer">
 <span class="setting-copy">
 <span class="setting-title">Message box control</span>
 <span class="setting-description" id="chatgpt-composer-help">Keyboard direction shortcuts</span>
 </span>
 <input class="switch" type="checkbox" role="switch" id="chatgpt-composer" data-site="chatgpt" data-key="composer" aria-describedby="chatgpt-composer-help chatgpt-composer-details" checked>
-<span class="sr-only" id="chatgpt-composer-details">Change the direction of the current paragraph or selected paragraphs using Left Ctrl + Shift (LTR) or Right Ctrl + Shift (RTL)</span>
+<span class="sr-only" id="chatgpt-composer-details">Change the direction of the current paragraph or selected paragraphs using Left/Right Ctrl+Shift</span>
 </label>
 <label title="Add buttons below your messages to change their direction and alignment" class="setting" for="chatgpt-user">
 <span class="setting-copy">
@@ -76,18 +76,25 @@
 <label title="Fix misplaced punctuation in messages set to right-to-left alignment" class="setting" for="chatgpt-rtlPunctuation">
 <span class="setting-copy">
 <span class="setting-title">Fix RTL punctuation</span>
-<span class="setting-description" id="chatgpt-rtlPunctuation-help">Correct punctuation in RTL messages</span>
+<span class="setting-description" id="chatgpt-rtlPunctuation-help">Correct punctuation</span>
 </span>
 <input class="switch" type="checkbox" role="switch" id="chatgpt-rtlPunctuation" data-site="chatgpt" data-key="rtlPunctuation" aria-describedby="chatgpt-rtlPunctuation-help chatgpt-rtlPunctuation-details">
 <span class="sr-only" id="chatgpt-rtlPunctuation-details">Fix misplaced punctuation in messages set to right-to-left alignment</span>
 </label>
-<label title="Click a recent conversation in the sidebar with the middle mouse button to open it in a new tab" class="setting" for="chatgpt-middleClick">
+<label title="Middle-click supported ChatGPT sidebar items to open them in a new background tab" class="setting" for="chatgpt-middleClick">
 <span class="setting-copy">
 <span class="setting-title">Mouse middle click</span>
-<span class="setting-description" id="chatgpt-middleClick-help">Open sidebar chats in new tabs</span>
+<span class="setting-description" id="chatgpt-middleClick-help">Open sidebar items in new tabs</span>
 </span>
 <input class="switch" type="checkbox" role="switch" id="chatgpt-middleClick" data-site="chatgpt" data-key="middleClick" aria-describedby="chatgpt-middleClick-help chatgpt-middleClick-details">
-<span class="sr-only" id="chatgpt-middleClick-details">Click a recent conversation in the sidebar with the middle mouse button to open it in a new tab</span>
+<span class="sr-only" id="chatgpt-middleClick-details">Middle-click New chat, Scheduled, Library, Plugins, recent conversations, or project folders to open them in a new background tab</span>
+</label>
+<label title="Pin selected text in a floating panel using the right-click context menu" class="setting" for="chatgpt-floatingPanel">
+<span class="setting-copy">
+<span class="setting-title">Floating reference panel</span>
+<span class="setting-description" id="chatgpt-floatingPanel-help">Right-click to pin content</span>
+</span>
+<input class="switch" type="checkbox" role="switch" id="chatgpt-floatingPanel" data-site="chatgpt" data-key="floatingPanel" aria-describedby="chatgpt-floatingPanel-help">
 </label>
 </fieldset>
 </details>
@@ -114,13 +121,13 @@
 <input class="switch" type="checkbox" role="switch" id="claude-rememberAlignment" data-site="claude" data-key="rememberAlignment" aria-describedby="claude-rememberAlignment-help claude-rememberAlignment-details" checked>
 <span class="sr-only" id="claude-rememberAlignment-details">Save each message’s alignment and restore it when you reload the page</span>
 </label>
-<label title="Change the direction of the current paragraph or selected paragraphs using Left Ctrl + Shift (LTR) or Right Ctrl + Shift (RTL)" class="setting" for="claude-composer">
+<label title="Change the direction of the current paragraph or selected paragraphs using Left/Right Ctrl+Shift" class="setting" for="claude-composer">
 <span class="setting-copy">
 <span class="setting-title">Message box control</span>
 <span class="setting-description" id="claude-composer-help">Keyboard direction shortcuts</span>
 </span>
 <input class="switch" type="checkbox" role="switch" id="claude-composer" data-site="claude" data-key="composer" aria-describedby="claude-composer-help claude-composer-details" checked>
-<span class="sr-only" id="claude-composer-details">Change the direction of the current paragraph or selected paragraphs using Left Ctrl + Shift (LTR) or Right Ctrl + Shift (RTL)</span>
+<span class="sr-only" id="claude-composer-details">Change the direction of the current paragraph or selected paragraphs using Left/Right Ctrl+Shift</span>
 </label>
 <label title="Add buttons below your messages to change their direction and alignment" class="setting" for="claude-user">
 <span class="setting-copy">
@@ -137,6 +144,13 @@
 </span>
 <input class="switch" type="checkbox" role="switch" id="claude-assistant" data-site="claude" data-key="assistant" aria-describedby="claude-assistant-help claude-assistant-details" checked>
 <span class="sr-only" id="claude-assistant-details">Add buttons below chatbot replies to change their direction and alignment</span>
+</label>
+<label title="Pin selected text in a floating panel using the right-click context menu" class="setting" for="claude-floatingPanel">
+<span class="setting-copy">
+<span class="setting-title">Floating reference panel</span>
+<span class="setting-description" id="claude-floatingPanel-help">Right-click to pin content</span>
+</span>
+<input class="switch" type="checkbox" role="switch" id="claude-floatingPanel" data-site="claude" data-key="floatingPanel" aria-describedby="claude-floatingPanel-help">
 </label>
 </fieldset>
 </details>
@@ -205,6 +219,13 @@
 <input class="switch" type="checkbox" role="switch" id="gemini-assistant" data-site="gemini" data-key="assistant" aria-describedby="gemini-assistant-help gemini-assistant-details" checked>
 <span class="sr-only" id="gemini-assistant-details">Add buttons below chatbot replies to change their direction and alignment</span>
 </label>
+<label title="Pin selected text in a floating panel using the right-click context menu" class="setting" for="gemini-floatingPanel">
+<span class="setting-copy">
+<span class="setting-title">Floating reference panel</span>
+<span class="setting-description" id="gemini-floatingPanel-help">Right-click to pin content</span>
+</span>
+<input class="switch" type="checkbox" role="switch" id="gemini-floatingPanel" data-site="gemini" data-key="floatingPanel" aria-describedby="gemini-floatingPanel-help">
+</label>
 </fieldset>
 </details>
 <details name="chatbots" class="chatbot" data-site="grok" >
@@ -230,13 +251,13 @@
 <input class="switch" type="checkbox" role="switch" id="grok-rememberAlignment" data-site="grok" data-key="rememberAlignment" aria-describedby="grok-rememberAlignment-help grok-rememberAlignment-details" checked>
 <span class="sr-only" id="grok-rememberAlignment-details">Save each message’s alignment and restore it when you reload the page</span>
 </label>
-<label title="Change the direction of the current paragraph or selected paragraphs using Left Ctrl + Shift (LTR) or Right Ctrl + Shift (RTL)" class="setting" for="grok-composer">
+<label title="Change the direction of the current paragraph or selected paragraphs using Left/Right Ctrl+Shift" class="setting" for="grok-composer">
 <span class="setting-copy">
 <span class="setting-title">Message box control</span>
 <span class="setting-description" id="grok-composer-help">Keyboard direction shortcuts</span>
 </span>
 <input class="switch" type="checkbox" role="switch" id="grok-composer" data-site="grok" data-key="composer" aria-describedby="grok-composer-help grok-composer-details" checked>
-<span class="sr-only" id="grok-composer-details">Change the direction of the current paragraph or selected paragraphs using Left Ctrl + Shift (LTR) or Right Ctrl + Shift (RTL)</span>
+<span class="sr-only" id="grok-composer-details">Change the direction of the current paragraph or selected paragraphs using Left/Right Ctrl+Shift</span>
 </label>
 <label title="Add buttons below your messages to change their direction and alignment" class="setting" for="grok-user">
 <span class="setting-copy">
@@ -254,6 +275,13 @@
 <input class="switch" type="checkbox" role="switch" id="grok-assistant" data-site="grok" data-key="assistant" aria-describedby="grok-assistant-help grok-assistant-details" checked>
 <span class="sr-only" id="grok-assistant-details">Add buttons below chatbot replies to change their direction and alignment</span>
 </label>
+<label title="Pin selected text in a floating panel using the right-click context menu" class="setting" for="grok-floatingPanel">
+<span class="setting-copy">
+<span class="setting-title">Floating reference panel</span>
+<span class="setting-description" id="grok-floatingPanel-help">Right-click to pin content</span>
+</span>
+<input class="switch" type="checkbox" role="switch" id="grok-floatingPanel" data-site="grok" data-key="floatingPanel" aria-describedby="grok-floatingPanel-help">
+</label>
 </fieldset>
 </details>
 </div>
@@ -268,3 +296,4 @@
 <script src="popup.js" defer></script>
 </body>
 </html>
+

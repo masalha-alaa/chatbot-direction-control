@@ -23,9 +23,12 @@ test("all supported defaults, independent writes, reload and cross-context updat
   for (const site of ["chatgpt", "claude", "gemini", "grok"]) {
     for (const feature of ["rememberAlignment", "user", "assistant"]) assert.equal(a.enabled(site, feature), true);
     assert.equal(a.enabled(site, "composer"), site !== "gemini");
+    assert.equal(a.enabled(site, "floatingPanel"), false);
   }
   assert.equal(a.enabled("chatgpt", "middleClick"), false);
   assert.equal(a.enabled("chatgpt", "rtlPunctuation"), true);
+  await a.set("chatgpt.floatingPanel", true);
+  assert.equal(b.enabled("chatgpt", "floatingPanel"), true);
   await Promise.all([a.set("chatgpt.middleClick", true), b.set("claude.user", false)]);
   assert.equal(b.enabled("chatgpt", "middleClick"), true);
   assert.equal(a.enabled("claude", "user"), false);
@@ -39,6 +42,7 @@ test("all supported defaults, independent writes, reload and cross-context updat
   const reopened = settingsContext(store).ChatDirectionSettings;
   await reopened.ready;
   assert.equal(reopened.get("enabled"), false);
+  assert.equal(reopened.get("chatgpt.floatingPanel"), true);
   await store.storage.local.remove("cdc:settings:enabled");
   assert.equal(reopened.get("enabled"), true);
 });
@@ -63,6 +67,9 @@ test("popup uses real settings, keeps dependencies and reports failed saves", as
   const input = id => document.getElementById(id);
   assert.equal(input("chatgpt-middleClick").checked, false);
   assert.equal(input("chatgpt-rtlPunctuation").checked, true);
+  for (const site of ["chatgpt", "claude", "gemini", "grok"]) {
+    assert.equal(input(`${site}-floatingPanel`).checked, false);
+  }
   assert.equal(input("gemini-composer"), null);
   for (const id of ["chatgpt-user", "chatgpt-assistant"]) {
     input(id).checked = false;

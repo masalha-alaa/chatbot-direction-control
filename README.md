@@ -1,4 +1,4 @@
-Chatbot Direction Control — v1.1.2
+Chatbot Direction Control — v1.1.3
 
 Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
@@ -13,10 +13,12 @@ Features:
 - Change individual chatbot messages between LTR and RTL using the alignment icons below each message.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
-- Middle-click a recent ChatGPT sidebar conversation or a project folder to open it
-  in a background tab. Project folders open their project page; conversations inside
-  projects are not included. Left-click, right-click, modified clicks, wheel scrolling,
-  and the row's pin/menu/new-chat controls keep their native behavior.
+- Pin selected text or whole equations in one draggable, resizable floating reference panel per tab.
+- Middle-click supported ChatGPT sidebar items to open them in a background tab:
+  New chat, Scheduled, Library, Plugins, recent conversations, and project folders.
+  Project folders open their project page; conversations inside projects are not
+  included. Left-click, right-click, modified clicks, wheel scrolling, and nested
+  row controls such as pin/menu/project-new-chat keep their native behavior.
 
 Useful if you regularly switch between languages such as English, Arabic, and Hebrew.
 The extension works entirely on your computer. It does not collect, send, upload, or
@@ -43,6 +45,8 @@ chatbot tabs once so they load the updated content scripts.
 - **Fix RTL punctuation** corrects trailing punctuation in ChatGPT RTL messages.
   It is disabled when both alignment-button settings are off; its choice is kept.
   Disabling it restores punctuation in currently processed messages.
+- **Floating reference panel** enables the right-click **Pin to floating panel** action.
+  It defaults to off for each chatbot; disabling it or the master switch closes the panel.
 - **Mouse middle click** opens supported ChatGPT sidebar chats and project folders
   in new background tabs. Both the content script and background worker enforce
   this preference and the master switch.
@@ -57,6 +61,52 @@ For a browser check, load the extension unpacked, refresh chatbot tabs, and try
 both message-role switches, paragraph shortcuts, persistence across reloads,
 the punctuation dependency, and middle-click on supported sidebar rows. Check
 that the master switch pauses these features and retains individual choices.
+
+Floating reference panel
+------------------------
+
+Select text and right-click **Pin to floating panel**, or right-click an equation
+directly. New panels start at the top left, below the page header and
+beside the narrow navigation rail. The reference stays at the same screen position as you scroll.
+Drag its header to move it, drag the bottom-right corner to resize it, and use the
+header − / + buttons to adjust reference text and equation sizes (70–200%, in 10% steps).
+The arrow button collapses/expands the panel; × closes it. Focus the header and use arrow keys
+to move it with the keyboard; Escape closes it when focus is in the panel.
+
+Pinning another item replaces the same tab's reference and keeps the panel position.
+The panel starts each new reference at its minimum width and grows vertically as text
+wraps, up to the available screen space. Long words and URLs also wrap.
+The minimum width includes the full header title and all controls, measured using
+the current font. Manual resizing applies until another item is pinned. Scrollbars appear only when
+the content genuinely exceeds the panel. Selecting part of a rendered equation captures the whole equation;
+selections can include text and multiple equations. Consecutive display equations have
+extra spacing between them, without padding around a single equation. Font adjustments
+persist while the panel is open, including when replacing its reference. Original content is untouched.
+Hidden message labels, unselectable page text and empty selection boundaries are
+excluded, including when triple-clicking the last line of a response.
+A reference stays visible during in-tab conversation navigation, until replaced or
+closed; refreshing the page clears it. Panels are independent across tabs.
+
+The new `contextMenus` permission supplies the native right-click entry, limited to
+supported chatbot pages. The entry also appears over unselected page content so an
+equation can be pinned without selecting it; using it on plain unselected content
+shows a short hint. Editors and embedded frames are excluded. Content never leaves
+the tab or goes into extension storage.
+
+Snapshots preserve computed typography and rendered KaTeX math in an isolated shadow
+tree. Only inert presentation markup is copied; scripts, handlers, embedded frames,
+custom elements, and external SVG references are excluded. Oversized selections are
+rejected with a hint. Only text and rendered equations are supported; embedded
+images and standalone graphics are excluded from selections.
+
+Reload the unpacked extension and refresh chatbot tabs to try the new menu.
+
+Browser regression check (development only): install `playwright` and `katex`
+locally with `npm install --no-save --package-lock=false playwright katex`, run
+`npx playwright install chromium`, then `node tests/floating-panel.browser.cjs`.
+The fixture recreates constrained math scrollers and checks complete equations,
+empty selection boundaries, compact sizing, excluded graphics, and panel controls.
+`CDC_CHROMIUM_PATH` may point to an existing Chromium executable.
 
 Composer shortcut behavior
 --------------------------
@@ -82,6 +132,8 @@ The extension separates generic behavior from chatbot-specific DOM knowledge:
 - `response-direction.js`: generic per-message controls, persistence, and DOM observation.
 - `sidebar-navigation.js`: opt-in, generic middle-click handling for sidebar conversations and project folders.
 - `background.js`: validates tab-opening requests and opens an inactive tab in the source window.
+- `floating-panel-background.js`: registers the native context menu and routes pin actions to the source tab.
+- `floating-panel.js`: captures inert formatted references and manages the isolated floating panel.
 - `styles.css`: shared direction/button styling.
 
 `composer-direction.js` and `response-direction.js` contain no chatbot host checks.
