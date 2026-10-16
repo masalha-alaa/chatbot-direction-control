@@ -219,6 +219,37 @@ test("pinning multiple paragraphs restores prose flow without changing inline co
     "Single-block layouts should retain their original display");
 });
 
+test("nested flex/grid display equations stack while inline equations remain inline", () => {
+  const h = pageHarness();
+  for (const display of ["flex", "grid"]) {
+    const source = h.document.createElement("div");
+    source.id = `math-layout-${display}`;
+    source.style.display = display;
+    source.innerHTML =
+      '<div style="display:inline-flex"><span data-math-display="true">E = mc²</span></div>' +
+      '<div style="display:inline-grid"><span data-math-display="true">∫ x dx</span></div>';
+    h.document.body.appendChild(source);
+    h.select({ commonAncestorContainer: source, intersectsNode: () => true });
+    h.context(source.id);
+    assert.equal(h.pin().ok, true);
+    const copy = h.shadow().querySelector(".reference").firstElementChild;
+    assert.equal(copy.style.display, "block");
+    assert.deepEqual(Array.from(copy.children, child => child.style.display), ["block", "block"]);
+    assert.equal(copy.querySelectorAll('[data-cdc-equation="display"]').length, 2);
+  }
+  const inline = h.document.createElement("div");
+  inline.id = "inline-math-layout";
+  inline.style.display = "inline-flex";
+  inline.innerHTML = '<span>Before</span><span data-math-display="false">a+b</span><span>After</span>';
+  h.document.body.appendChild(inline);
+  h.select({ commonAncestorContainer: inline, intersectsNode: () => true });
+  h.context(inline.id);
+  assert.equal(h.pin().ok, true);
+  const copy = h.shadow().querySelector(".reference").firstElementChild;
+  assert.equal(copy.style.display, "inline-flex");
+  assert.equal(copy.querySelectorAll('[data-cdc-equation="display"]').length, 0);
+});
+
 test("mixed selected content excludes scripts, frames, handlers, controls and active links", () => {
   const h=pageHarness(), source=h.el("unsafe");
   h.select({commonAncestorContainer:source,intersectsNode:()=>true});
