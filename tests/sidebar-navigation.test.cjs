@@ -363,7 +363,7 @@ test("worker reports tab-creation failures and ignores unrelated messages", asyn
 
 test("manifest includes the worker/controllers, release version and required permissions", () => {
   const manifest = JSON.parse(read("manifest.json"));
-  assert.equal(manifest.version, "1.1.3");
+  assert.equal(manifest.version, "1.1.4");
   assert.deepEqual(manifest.permissions, ["storage", "contextMenus"]);
   assert.equal(manifest.background.service_worker, "src/background/background.js");
   assert(manifest.content_scripts[0].js.includes("src/content/sidebar-navigation.js"));
