@@ -206,8 +206,8 @@ test("paragraph edge margins match for direct and wrapped selections", () => {
   assert.equal(h.pin().ok, true);
   let root = h.shadow().querySelector(".reference").firstElementChild;
   assert.equal(root.localName, "p");
-  assert.equal(root.style.marginBlockStart, "0");
-  assert.equal(root.style.marginBlockEnd, "0");
+  assert.equal(root.style.getPropertyValue("margin-block-start"), "0");
+  assert.equal(root.style.getPropertyValue("margin-block-end"), "0");
 
   // Triple-clicking can include the trailing paragraph boundary, causing
   // the copied root to be an ancestor rather than the paragraph itself.
@@ -217,8 +217,8 @@ test("paragraph edge margins match for direct and wrapped selections", () => {
   assert.equal(h.pin().ok, true);
   root = h.shadow().querySelector(".reference").firstElementChild;
   assert.equal(root.localName, "div");
-  assert.equal(root.querySelector("p").style.marginBlockStart, "0");
-  assert.equal(root.querySelector("p").style.marginBlockEnd, "0");
+  assert.equal(root.querySelector("p").style.getPropertyValue("margin-block-start"), "0");
+  assert.equal(root.querySelector("p").style.getPropertyValue("margin-block-end"), "0");
   assert.equal(root.querySelector("code").textContent, "inline code");
 });
 
@@ -234,12 +234,12 @@ test("only outer paragraph margins are trimmed in a multi-paragraph selection", 
   assert.equal(h.pin().ok, true);
   const paragraphs = [...h.shadow().querySelectorAll(".reference p")];
   assert.equal(paragraphs.length, 3);
-  assert.equal(paragraphs[0].style.marginBlockStart, "0");
-  assert.equal(paragraphs[0].style.marginBlockEnd, "");
-  assert.equal(paragraphs[1].style.marginBlockStart, "");
-  assert.equal(paragraphs[1].style.marginBlockEnd, "");
-  assert.equal(paragraphs[2].style.marginBlockStart, "");
-  assert.equal(paragraphs[2].style.marginBlockEnd, "0");
+  assert.equal(paragraphs[0].style.getPropertyValue("margin-block-start"), "0");
+  assert.equal(paragraphs[0].style.getPropertyValue("margin-block-end"), "");
+  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-start"), "");
+  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-end"), "");
+  assert.equal(paragraphs[2].style.getPropertyValue("margin-block-start"), "");
+  assert.equal(paragraphs[2].style.getPropertyValue("margin-block-end"), "0");
 });
 
 test("pinning multiple paragraphs restores prose flow without changing inline code or single-block layouts", () => {
