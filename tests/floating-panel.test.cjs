@@ -122,7 +122,11 @@ function pageHarness(siteId = "chatgpt") {
     getPropertyValue: property => ({"font-family":"TestMath", "font-size":"16px", display:"inline", "line-height":"24px"}[property] || "")
   };
   const context = vm.createContext({ document, Element, HTMLElement, Node, URL, console,
-    location: new URL("https://chatgpt.com/c/test"), getComputedStyle: () => computed,
+    location: new URL("https://chatgpt.com/c/test"), getComputedStyle: element => ({
+      ...computed,
+      display: element?.style?.display || "inline",
+      getPropertyValue: property => element?.style?.getPropertyValue(property) || computed.getPropertyValue(property)
+    }),
     matchMedia: () => ({matches:false}), innerWidth: 1000, innerHeight: 800,
     setTimeout: () => 1, clearTimeout() {},
     window: { getSelection: () => selection, addEventListener: (type, fn) => listeners.set(type,fn) },
@@ -185,6 +189,65 @@ test("pinning replaces one panel, expands a collapsed panel and disabling closes
   assert.equal(h.shadow().querySelector(".content").textContent,"A quiet river.");
   assert.equal(h.shadow().querySelector(".collapse").getAttribute("aria-expanded"),"true");
   h.disable();assert.equal(h.el("cdc-floating-panel"),null);
+});
+
+test("pinning multiple paragraphs restores prose flow without changing inline code or single-block layouts", () => {
+  const h = pageHarness();
+  for (const display of ["flex", "inline-flex", "grid", "inline-grid"]) {
+    const source = h.document.createElement("div");
+    source.id = `layout-${display}`;
+    source.style.display = display;
+    source.innerHTML = "<p>Consequently, the callback could return <code>true</code> early.</p>" +
+      "<p>A more robust implementation should also verify <code>gcount()</code>.</p>";
+    h.document.body.appendChild(source);
+    h.select({ commonAncestorContainer: source, intersectsNode: () => true });
+    h.context(source.id);
+    assert.equal(h.pin().ok, true);
+    const copy = h.shadow().querySelector(".reference").firstElementChild;
+    assert.equal(copy.style.display, "block", `${display} must become a vertical prose container`);
+    assert.equal(copy.querySelectorAll("p").length, 2);
+    assert.equal(copy.querySelector("code").style.display, "inline");
+    assert(copy.textContent.includes("gcount()"));
+  }
+  const single = h.document.createElement("div");
+  single.id = "single-flex"; single.style.display = "flex";
+  single.innerHTML = "<p>One paragraph with <code>inline code</code>.</p>";
+  h.document.body.appendChild(single);
+  h.select({ commonAncestorContainer: single, intersectsNode: () => true });
+  h.context("single-flex"); assert.equal(h.pin().ok, true);
+  assert.equal(h.shadow().querySelector(".reference").firstElementChild.style.display, "flex",
+    "Single-block layouts should retain their original display");
+});
+
+test("nested flex/grid display equations stack while inline equations remain inline", () => {
+  const h = pageHarness();
+  for (const display of ["flex", "grid"]) {
+    const source = h.document.createElement("div");
+    source.id = `math-layout-${display}`;
+    source.style.display = display;
+    source.innerHTML =
+      '<div style="display:inline-flex"><span data-math-display="true">E = mc²</span></div>' +
+      '<div style="display:inline-grid"><span data-math-display="true">∫ x dx</span></div>';
+    h.document.body.appendChild(source);
+    h.select({ commonAncestorContainer: source, intersectsNode: () => true });
+    h.context(source.id);
+    assert.equal(h.pin().ok, true);
+    const copy = h.shadow().querySelector(".reference").firstElementChild;
+    assert.equal(copy.style.display, "block");
+    assert.deepEqual(Array.from(copy.children, child => child.style.display), ["block", "block"]);
+    assert.equal(copy.querySelectorAll('[data-cdc-equation="display"]').length, 2);
+  }
+  const inline = h.document.createElement("div");
+  inline.id = "inline-math-layout";
+  inline.style.display = "inline-flex";
+  inline.innerHTML = '<span>Before</span><span data-math-display="false">a+b</span><span>After</span>';
+  h.document.body.appendChild(inline);
+  h.select({ commonAncestorContainer: inline, intersectsNode: () => true });
+  h.context(inline.id);
+  assert.equal(h.pin().ok, true);
+  const copy = h.shadow().querySelector(".reference").firstElementChild;
+  assert.equal(copy.style.display, "inline-flex");
+  assert.equal(copy.querySelectorAll('[data-cdc-equation="display"]').length, 0);
 });
 
 test("mixed selected content excludes scripts, frames, handlers, controls and active links", () => {

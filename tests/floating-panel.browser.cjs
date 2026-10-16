@@ -28,6 +28,17 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
       <span id="wide" data-math-display="true">${wide}</span><textarea id="editor">Private draft</textarea>
       <div id="pair"><span data-math-display="true">${math}</span><span data-math-display="true">${integral}</span></div>
       <div id="wrapped-pair"><div><span data-math-display="true">${math}</span></div><div><span data-math-display="true">${integral}</span></div></div>
+      <div id="flex-equations" style="display:flex;flex-direction:column">
+        <div style="display:inline-flex"><span data-math-display="true" data-math-source="E=mc^2">${math}</span></div>
+        <div style="display:inline-flex"><span data-math-display="true" data-math-source="I=1/3">${integral}</span></div>
+      </div>
+      <div id="grid-equations" style="display:grid;grid-template-columns:1fr">
+        <div style="display:inline-grid"><span data-math-display="true" data-math-source="E=mc^2">${math}</span></div>
+        <div style="display:inline-grid"><span data-math-display="true" data-math-source="I=1/3">${integral}</span></div>
+      </div>
+      <div id="inline-equation" style="display:inline-flex"><span>Before</span><span data-math-display="false">a+b</span><span>After</span></div>
+      <div id="flex-prose" style="display:flex"><p>Consequently, the callback could return <code>true</code> early.</p><p>A more robust implementation should verify <code>gcount()</code>.</p></div>
+      <div id="grid-prose" style="display:grid;grid-template-columns:1fr 1fr"><p>Consequently, the callback could return <code>true</code> early.</p><p>A more robust implementation should verify <code>gcount()</code>.</p></div>
       <section id="boundary-user"><article><p id="last-user">The final response line ends here.</p></article><h2 class="sr-only">You said:</h2><article><p>Next user message.</p></article></section>
       <section id="boundary-footer"><article><p id="last-footer">Another final response line ends here.</p></article><footer style="user-select:none">ChatGPT can make mistakes. Check important info.</footer><p>Following selectable block.</p></section>
       <p id="long-text">${'The silver fox crossed the quiet bridge while rain fell over the valley. '.repeat(4)}</p>
@@ -78,6 +89,41 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
     assert.deepEqual(await page.evaluate(()=>[...panelRoot().querySelectorAll('[data-cdc-equation]')].map(e=>e.style.marginTop)),['0px','16px'],'Only the second consecutive equation gets extra spacing, including through wrappers');
     assert(await page.evaluate(()=>{const [first,second]=[...panelRoot().querySelectorAll('[data-cdc-equation]')].map(e=>e.getBoundingClientRect());return second.top-first.bottom>=15;}),'The equation gap must be visible');
   }
+  // ChatGPT renders display equations inside layout wrappers. Their original
+  // flex-direction/grid columns are not copied into the isolated snapshot.
+  for (const selector of ['#flex-equations','#grid-equations']) {
+    await page.evaluate(selector=>{select(selector);context(selector);pin();},selector);
+    const layout=await page.evaluate(()=>{
+      const root=panelRoot().querySelector('.reference').firstElementChild;
+      const equations=[...root.querySelectorAll('[data-cdc-equation="display"]')];
+      const [first,second]=equations.map(e=>e.getBoundingClientRect());
+      return {rootDisplay:getComputedStyle(root).display,wrappers:[...root.children].map(c=>getComputedStyle(c).display),
+        count:equations.length,secondBelowFirst:second.top >= first.bottom+15};
+    });
+    assert.equal(layout.rootDisplay,'block',selector+' must restore vertical block flow');
+    assert.deepEqual(layout.wrappers,['block','block'],selector+' must also normalize nested equation wrappers');
+    assert.equal(layout.count,2,'Both equations must remain intact');
+    assert(layout.secondBelowFirst,selector+' must preserve the existing 16px equation gap');
+  }
+  await page.evaluate(()=>{select('#inline-equation');context('#inline-equation');pin();});
+  assert.equal(await page.evaluate(()=>getComputedStyle(panelRoot().querySelector('.reference').firstElementChild).display),'inline-flex',
+    'Inline math must retain its surrounding inline flex layout');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('[data-cdc-equation="display"]').length),0);
+  for (const selector of ['#flex-prose','#grid-prose']) {
+    await page.evaluate(selector=>{select(selector);context(selector);pin();},selector);
+    const layout=await page.evaluate(()=>{
+      const container=panelRoot().querySelector('.reference').firstElementChild;
+      const paragraphs=[...container.querySelectorAll('p')];
+      const first=paragraphs[0].getBoundingClientRect(),second=paragraphs[1].getBoundingClientRect();
+      return {display:getComputedStyle(container).display,vertical:second.top>=first.bottom,
+        inlineCode:container.querySelector('code').textContent==='true',paragraphCount:paragraphs.length};
+    });
+    assert.equal(layout.display,'block',selector+' must pin as ordinary prose');
+    assert.equal(layout.paragraphCount,2);
+    assert(layout.vertical,selector+' paragraphs must appear one below another');
+    assert(layout.inlineCode,'Inline code must survive the layout normalization');
+  }
+  await page.evaluate(()=>{getSelection().removeAllRanges();context('#integral');pin();});
   const fontBefore=await page.evaluate(()=>{const p=panelRoot();const atom=p.querySelector('[data-cdc-equation] [aria-hidden]');return {width:atom.getBoundingClientRect().width,title:getComputedStyle(p.querySelector('.title')).fontSize};});
   for(let i=0;i<5;i++) await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
   const fontAfter=await page.evaluate(()=>{const p=panelRoot();const atom=p.querySelector('[data-cdc-equation] [aria-hidden]');const c=p.querySelector('.content');return {width:atom.getBoundingClientRect().width,title:getComputedStyle(p.querySelector('.title')).fontSize,fits:c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1};});
