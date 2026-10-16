@@ -28,6 +28,19 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
       <span id="wide" data-math-display="true">${wide}</span><textarea id="editor">Private draft</textarea>
       <div id="pair"><span data-math-display="true">${math}</span><span data-math-display="true">${integral}</span></div>
       <div id="wrapped-pair"><div><span data-math-display="true">${math}</span></div><div><span data-math-display="true">${integral}</span></div></div>
+      <div id="flex-equations" style="display:flex;flex-direction:column">
+        <div style="display:inline-flex"><span data-math-display="true" data-math-source="E=mc^2">${math}</span></div>
+        <div style="display:inline-flex"><span data-math-display="true" data-math-source="I=1/3">${integral}</span></div>
+      </div>
+      <div id="grid-equations" style="display:grid;grid-template-columns:1fr">
+        <div style="display:inline-grid"><span data-math-display="true" data-math-source="E=mc^2">${math}</span></div>
+        <div style="display:inline-grid"><span data-math-display="true" data-math-source="I=1/3">${integral}</span></div>
+      </div>
+      <div id="inline-equation" style="display:inline-flex"><span>Before</span><span data-math-display="false">a+b</span><span>After</span></div>
+      <div id="edge-wrapper"><div><p id="edge-paragraph">You can pull the branch and retest both screenshots.</p></div></div>
+      <div id="edge-multiple"><section><p>First paragraph.</p><p>Second paragraph.</p><p>Third paragraph.</p></section></div>
+      <div id="flex-prose" style="display:flex"><p>Consequently, the callback could return <code>true</code> early.</p><p>A more robust implementation should verify <code>gcount()</code>.</p></div>
+      <div id="grid-prose" style="display:grid;grid-template-columns:1fr 1fr"><p>Consequently, the callback could return <code>true</code> early.</p><p>A more robust implementation should verify <code>gcount()</code>.</p></div>
       <section id="boundary-user"><article><p id="last-user">The final response line ends here.</p></article><h2 class="sr-only">You said:</h2><article><p>Next user message.</p></article></section>
       <section id="boundary-footer"><article><p id="last-footer">Another final response line ends here.</p></article><footer style="user-select:none">ChatGPT can make mistakes. Check important info.</footer><p>Following selectable block.</p></section>
       <p id="long-text">${'The silver fox crossed the quiet bridge while rain fell over the valley. '.repeat(4)}</p>
@@ -78,6 +91,84 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
     assert.deepEqual(await page.evaluate(()=>[...panelRoot().querySelectorAll('[data-cdc-equation]')].map(e=>e.style.marginTop)),['0px','16px'],'Only the second consecutive equation gets extra spacing, including through wrappers');
     assert(await page.evaluate(()=>{const [first,second]=[...panelRoot().querySelectorAll('[data-cdc-equation]')].map(e=>e.getBoundingClientRect());return second.top-first.bottom>=15;}),'The equation gap must be visible');
   }
+  // ChatGPT renders display equations inside layout wrappers. Their original
+  // flex-direction/grid columns are not copied into the isolated snapshot.
+  for (const selector of ['#flex-equations','#grid-equations']) {
+    await page.evaluate(selector=>{select(selector);context(selector);pin();},selector);
+    const layout=await page.evaluate(()=>{
+      const root=panelRoot().querySelector('.reference').firstElementChild;
+      const equations=[...root.querySelectorAll('[data-cdc-equation="display"]')];
+      const [first,second]=equations.map(e=>e.getBoundingClientRect());
+      return {rootDisplay:getComputedStyle(root).display,wrappers:[...root.children].map(c=>getComputedStyle(c).display),
+        count:equations.length,secondBelowFirst:second.top >= first.bottom+15};
+    });
+    assert.equal(layout.rootDisplay,'block',selector+' must restore vertical block flow');
+    assert.deepEqual(layout.wrappers,['block','block'],selector+' must also normalize nested equation wrappers');
+    assert.equal(layout.count,2,'Both equations must remain intact');
+    assert(layout.secondBelowFirst,selector+' must preserve the existing 16px equation gap');
+  }
+  await page.evaluate(()=>{select('#inline-equation');context('#inline-equation');pin();});
+  assert.equal(await page.evaluate(()=>getComputedStyle(panelRoot().querySelector('.reference').firstElementChild).display),'inline-flex',
+    'Inline math must retain its surrounding inline flex layout');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('[data-cdc-equation="display"]').length),0);
+  // A drag selection starts within the paragraph. A paragraph-break
+  // selection (as produced by triple-click) can instead start inside the
+  // paragraph and end at the outer wrapper.
+  const paragraphMetrics=async()=>page.evaluate(()=>{
+    const reference=panelRoot().querySelector('.reference');
+    const paragraph=reference.querySelector('p');
+    const container=reference.getBoundingClientRect(),box=paragraph.getBoundingClientRect();
+    const style=getComputedStyle(paragraph);
+    return {top:box.top-container.top,bottom:container.bottom-box.bottom,
+      marginStart:style.marginBlockStart,marginEnd:style.marginBlockEnd,
+      height:document.getElementById('cdc-floating-panel').getBoundingClientRect().height,
+      text:paragraph.textContent};
+  });
+  await page.evaluate(()=>{select('#edge-paragraph');context('#edge-paragraph');pin();});
+  const draggedMargins=await paragraphMetrics();
+  await page.evaluate(()=>{
+    const p=document.querySelector('#edge-paragraph');
+    const container=document.querySelector('#edge-wrapper');
+    const range=document.createRange();
+    range.setStart(p.firstChild,0);
+    range.setEnd(container,1);
+    const selection=getSelection();selection.removeAllRanges();selection.addRange(range);
+    context('#edge-paragraph');pin();
+  });
+  const tripleClickMargins=await paragraphMetrics();
+  assert.equal(tripleClickMargins.text,draggedMargins.text,'Both selection styles pin the same paragraph');
+  assert.equal(tripleClickMargins.marginStart,'0px');
+  assert.equal(tripleClickMargins.marginEnd,'0px');
+  assert(Math.abs(tripleClickMargins.top-draggedMargins.top)<1,'Both selections have identical top spacing');
+  assert(Math.abs(tripleClickMargins.bottom-draggedMargins.bottom)<1,'Both selections have identical bottom spacing');
+  assert(Math.abs(tripleClickMargins.height-draggedMargins.height)<1,'Both selection styles fit to the same panel height');
+  await page.evaluate(()=>{select('#edge-multiple');context('#edge-multiple');pin();});
+  const multiMargins=await page.evaluate(()=>{
+    const paragraphs=[...panelRoot().querySelectorAll('.reference p')];
+    const rects=paragraphs.map(p=>p.getBoundingClientRect());
+    return {first:getComputedStyle(paragraphs[0]).marginBlockStart,
+      middle:getComputedStyle(paragraphs[1]).marginBlockStart,
+      last:getComputedStyle(paragraphs[2]).marginBlockEnd,
+      gaps:[rects[1].top-rects[0].bottom,rects[2].top-rects[1].bottom]};
+  });
+  assert.equal(multiMargins.first,'0px');
+  assert.equal(multiMargins.last,'0px');
+  assert(multiMargins.gaps.every(gap=>gap>0),'Interior paragraph spacing must be preserved');
+  for (const selector of ['#flex-prose','#grid-prose']) {
+    await page.evaluate(selector=>{select(selector);context(selector);pin();},selector);
+    const layout=await page.evaluate(()=>{
+      const container=panelRoot().querySelector('.reference').firstElementChild;
+      const paragraphs=[...container.querySelectorAll('p')];
+      const first=paragraphs[0].getBoundingClientRect(),second=paragraphs[1].getBoundingClientRect();
+      return {display:getComputedStyle(container).display,vertical:second.top>=first.bottom,
+        inlineCode:container.querySelector('code').textContent==='true',paragraphCount:paragraphs.length};
+    });
+    assert.equal(layout.display,'block',selector+' must pin as ordinary prose');
+    assert.equal(layout.paragraphCount,2);
+    assert(layout.vertical,selector+' paragraphs must appear one below another');
+    assert(layout.inlineCode,'Inline code must survive the layout normalization');
+  }
+  await page.evaluate(()=>{getSelection().removeAllRanges();context('#integral');pin();});
   const fontBefore=await page.evaluate(()=>{const p=panelRoot();const atom=p.querySelector('[data-cdc-equation] [aria-hidden]');return {width:atom.getBoundingClientRect().width,title:getComputedStyle(p.querySelector('.title')).fontSize};});
   for(let i=0;i<5;i++) await page.evaluate(()=>panelRoot().querySelector('.font-larger').click());
   const fontAfter=await page.evaluate(()=>{const p=panelRoot();const atom=p.querySelector('[data-cdc-equation] [aria-hidden]');const c=p.querySelector('.content');return {width:atom.getBoundingClientRect().width,title:getComputedStyle(p.querySelector('.title')).fontSize,fits:c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1};});
@@ -176,9 +267,76 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   assert.equal(await page.evaluate(()=>window.failed),undefined);
   await page.evaluate(()=>{select('#text');context('#text');document.querySelector('#text').remove();pin();});
   assert.match(await page.evaluate(()=>panelText()),/silver fox/);
+  // ChatGPT's diagram + distance table: a direct image click must never clone
+  // the table, even when the old selection covers the complete outer box.
+  await page.setViewportSize({width:1100,height:800});
+  const diagramUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    fs.readFileSync(path.join(root,'tests/fixtures/pin-svg-diagram.svg'),'utf8'));
+  await page.evaluate(src => {
+    const box=document.createElement('div'); box.id='diagram-box';
+    box.innerHTML='<img id="diagram" data-d-component="svg" alt="Four-node graph" style="aspect-ratio:auto 320 / 145;width:100%" onclick="window.failed=1"><table><tr><td>Node</td><td>Distance</td></tr></table>';
+    document.body.prepend(box);box.querySelector('img').src=src;
+    window.customImageMenus=0;
+    box.addEventListener('contextmenu',event=>{window.customImageMenus++;event.preventDefault();});
+  },diagramUrl);
+  await page.waitForFunction(()=>document.querySelector('#diagram').naturalWidth>0);
+  const diagramPin=await page.evaluate(()=>{
+    select('#diagram-box');
+    const nativeAllowed=context('#diagram');
+    let result;onPin({type:'cdc:pin-floating-panel',diagram:true},{id:'test-extension'},value=>result=value);
+    return {nativeAllowed,result};
+  });
+  assert.equal(diagramPin.nativeAllowed,true,'The browser native image menu must remain available');
+  assert.equal(diagramPin.result.ok,true);
+  assert.equal(await page.evaluate(()=>customImageMenus),0,'The site image menu must not intercept supported diagrams');
+  await page.waitForFunction(()=>panelRoot().querySelector('[data-cdc-diagram]')?.naturalWidth>0);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('[data-cdc-diagram]').src),diagramUrl);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference table,.reference svg,.reference [onclick],.reference [id]').length),0);
+  assert.equal(await page.evaluate(()=>panelText()),'');
+  // The other menu item must use the selection captured by that same right-click,
+  // even if opening the browser menu has since cleared the live selection.
+  await page.evaluate(()=>{getSelection().removeAllRanges();pin();});
+  assert.equal(await page.evaluate(()=>panelText()),'NodeDistance');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference img,.reference svg').length),0);
+  await page.evaluate(()=>{let result;onPin({type:'cdc:pin-floating-panel',diagram:true},{id:'test-extension'},value=>result=value);if(!result.ok)throw Error('Diagram snapshot was lost');});
+  await page.waitForFunction(()=>panelRoot().querySelector('[data-cdc-diagram]')?.naturalWidth>0);
+  const diagramMetrics=()=>page.evaluate(()=>{
+    const c=panelRoot().querySelector('.content'),i=c.querySelector('img').getBoundingClientRect();
+    return {ratio:i.width/i.height,width:i.width,fits:c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1};
+  });
+  let dm=await diagramMetrics();
+  assert(Math.abs(dm.ratio-320/145)<.01,'The diagram must preserve its aspect ratio');
+  assert(dm.fits,'The decoded diagram must fit the compact panel without scrollbars');
+  await page.evaluate(()=>{scrollTo(0,0);document.querySelector('#diagram').remove();});
+  assert(await page.evaluate(()=>panelRoot().querySelector('img').complete),'The pin must survive removal of its source');
+  const diagramBox=await page.locator('#cdc-floating-panel').boundingBox();
+  await page.mouse.move(diagramBox.x+diagramBox.width-8,diagramBox.y+diagramBox.height-8);
+  await page.mouse.down();await page.mouse.move(diagramBox.x+diagramBox.width+100,diagramBox.y+diagramBox.height+100);await page.mouse.up();
+  const enlargedDiagram=await diagramMetrics();
+  assert(enlargedDiagram.width>dm.width,'Resizing the panel must resize the diagram');
+  assert(Math.abs(enlargedDiagram.ratio-320/145)<.01);
+  await page.screenshot({path:path.join(require('node:os').tmpdir(),'cdc-svg-diagram-panel.png')});
+  await page.evaluate(()=>{getSelection().removeAllRanges();context('#integral');pin();});
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('img').length),0,'Pinning an equation replaces the diagram');
+  // Mixed prose + math + diagram exercises the complete regular snapshot path.
+  await page.evaluate(src=>{
+    const box=document.querySelector('#diagram-box');
+    const image=document.createElement('img');image.id='diagram';image.src=src;image.setAttribute('data-d-component','svg');
+    box.prepend(image);
+    const caption=document.createElement('p');caption.textContent='Selected caption: ';
+    caption.appendChild(document.querySelector('#integral').cloneNode(true));box.appendChild(caption);
+    select('#diagram-box');context('#diagram');
+    getSelection().removeAllRanges();pin();
+  },diagramUrl);
+  assert.match(await page.evaluate(()=>panelText()),/Selected caption:/);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference [data-cdc-equation]').length),1);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference img').length),0);
+  await page.evaluate(()=>{context('#diagram');});
+  assert.equal(await page.evaluate(()=>pin().ok),false,'A diagram-only click must not reuse a stale text selection');
+  assert.equal(await page.evaluate(()=>{let result;onPin({type:'cdc:pin-floating-panel',diagram:true},{id:'test-extension'},value=>result=value);return result.ok;}),true);
   await page.evaluate(()=>{featureEnabled=false;subscribers.forEach(fn=>fn());});
   assert.equal(await page.locator('#cdc-floating-panel').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS: minimum width/wrapped height, native triple-click boundaries, rendered KaTeX, equation spacing, font scaling/limits/keyboard controls, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
+  console.log('PASS: embedded SVG diagram-only capture, image loading/aspect ratio/resizing, native image menu isolation, minimum width/wrapped height, native triple-click boundaries, rendered KaTeX, equation spacing, font scaling/limits/keyboard controls, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});

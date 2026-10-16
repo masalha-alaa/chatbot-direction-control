@@ -30,6 +30,30 @@
     return element?.closest("[data-math-source], [data-math-display]") ||
       element?.closest(".katex-display") || element?.closest(".katex, mjx-container, math");
   }
+  function diagramImage(element) {
+    // ChatGPT's self-contained diagrams are SVG images, not inline SVG markup.
+    // Keep them as images: SVG scripts and external resources stay inert.
+    return site.id === "chatgpt" && element?.matches('img[data-d-component="svg"]') &&
+      /^data:image\/svg\+xml[;,]/i.test(element.getAttribute("src") || "") &&
+      element.getAttribute("src").length <= 2_000_000;
+  }
+  function captureDiagram(source) {
+    const image = document.createElement("img");
+    image.src = source.getAttribute("src");
+    image.alt = source.getAttribute("alt") || "Pinned diagram";
+    image.draggable = false;
+    image.setAttribute("data-cdc-diagram", "");
+    Object.assign(image.style, { display: "block", width: "100%", maxWidth: "100%", height: "auto" });
+    // Reserve the source aspect ratio before the new image finishes decoding.
+    const ratio = getComputedStyle(source).aspectRatio;
+    if (ratio && ratio !== "auto") image.style.aspectRatio = ratio;
+    else if (source.naturalWidth && source.naturalHeight) {
+      image.style.aspectRatio = `${source.naturalWidth} / ${source.naturalHeight}`;
+    }
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(image);
+    return { fragment, diagram: true, background: backdrop(source), color: getComputedStyle(source).color };
+  }
   // A range ending at the start of an equation can intersect its outer span
   // without selecting any equation content. Do not expand that empty boundary.
   function selectedMathContent(source, range) {
@@ -139,6 +163,15 @@
     }
     // Do not retain empty layout wrappers at a range's trailing boundary.
     if (range && !copy.childNodes.length && !["br", "hr"].includes(tag)) return null;
+    // Flex/grid direction and gaps are not captured, so source columns become
+    // rows in the panel. Restore document flow for block prose and display math,
+    // including intermediate wrappers around a single display equation.
+    // Leave inline equations and KaTeX's own layout untouched.
+    if (!isMath && /^(inline-)?(flex|grid)$/.test(computed.display) &&
+        (copy.querySelectorAll("p, blockquote, pre, h1, h2, h3, h4, h5, h6, ul, ol").length > 1 ||
+         copy.querySelector('[data-cdc-equation="display"]'))) {
+      copy.style.display = "block";
+    }
     return copy;
   }
 
@@ -170,6 +203,29 @@
     visit(root);
   }
 
+  // Triple-click can select the paragraph break and therefore use an outer
+  // container as the range's common ancestor. Strip margins only at the
+  // selection's outer edges, regardless of how deeply the paragraph is nested.
+  // Interior paragraphs keep their natural spacing.
+  function trimParagraphEdgeMargins(root) {
+    function edgeParagraph(node, leading) {
+      while (node?.nodeType === Node.ELEMENT_NODE) {
+        if (node.localName === "p") return node;
+        if (node.hasAttribute("data-cdc-equation")) return null;
+        const children = [...node.childNodes].filter(child =>
+          child.nodeType === Node.ELEMENT_NODE ||
+          (child.nodeType === Node.TEXT_NODE && child.textContent.trim()));
+        if (!children.length) return null;
+        node = children[leading ? 0 : children.length - 1];
+      }
+      return null;
+    }
+    const first = edgeParagraph(root, true);
+    if (first) first.style.setProperty("margin-block-start", "0");
+    const last = edgeParagraph(root, false);
+    if (last) last.style.setProperty("margin-block-end", "0");
+  }
+
   function capture(target) {
     if (editable(target)) return null;
     const fragment = document.createDocumentFragment();
@@ -184,10 +240,12 @@
       if (editable(elementOf(range.startContainer)) || editable(elementOf(range.endContainer))) return null;
       source = mathRoot(elementOf(range.commonAncestorContainer)) || elementOf(range.commonAncestorContainer);
     }
-    if (!source) return { error: "Select text, or right-click an equation to pin it." };
+    if (!source) return target.closest("img, picture") ? null :
+      { error: "Select text or an image, then right-click to pin it." };
     try {
       const copy = snapshotNode(source, range, { count: 0 });
       if (!copy || !(copy.textContent.trim() || copy.querySelector?.("svg"))) return null;
+      if (range) trimParagraphEdgeMargins(copy);
       // Display equation wrappers should fit the panel; internal math widths
       // and positioning remain intact, and oversized formulas can scroll.
       if (mathRoot(source)) {
@@ -383,23 +441,36 @@
 
   document.addEventListener("contextmenu", event => {
     pending = null;
-    if (!enabled() || !(event.target instanceof Element) || event.composedPath().some(node => node?.id === HOST_ID)) return;
-    const captured = capture(event.target);
-    if (captured) pending = { ...captured, url: location.href };
+    if (!enabled() || !(event.target instanceof Element) || editable(event.target) ||
+        event.composedPath().some(node => node?.id === HOST_ID)) return;
+    // Both menu actions may appear for a selection containing a diagram.
+    // Save independent snapshots before Chrome's menu can clear the selection.
+    const content = capture(event.target);
+    const diagram = diagramImage(event.target) ? captureDiagram(event.target) : null;
+    if (content || diagram) pending = { content, diagram, url: location.href };
+    // Let Chrome open its native menu instead of ChatGPT's custom image menu.
+    if (diagram) event.stopImmediatePropagation();
   }, true);
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message?.type !== "cdc:pin-floating-panel" || sender.id !== chrome.runtime.id) return;
     if (!enabled() || !pending || pending.url !== location.href) { respond({ ok: false }); return; }
-    if (pending.error) { notify(pending.error); respond({ ok: false }); return; }
+    const captured = message.diagram ? pending.diagram : pending.content;
+    if (!captured) { respond({ ok: false }); return; }
+    if (captured.error) { notify(captured.error); respond({ ok: false }); return; }
     if (!panel) createPanel();
     const collapse = panel.shell.querySelector(".collapse");
     panel.collapsed = false;
     panel.shell.classList.remove("collapsed");
     collapse.textContent = "▾"; collapse.title = "Collapse";
     collapse.setAttribute("aria-label", "Collapse panel"); collapse.setAttribute("aria-expanded", "true");
-    panel.content.style.background = pending.background;
-    panel.content.style.color = pending.color;
-    panel.reference.replaceChildren(pending.fragment.cloneNode(true));
+    panel.content.style.background = captured.background;
+    panel.content.style.color = captured.color;
+    panel.reference.replaceChildren(captured.fragment.cloneNode(true));
+    // Loading the cloned data URL is asynchronous, even for a cached image.
+    // Refit after decode, while respecting a user's subsequent manual resize.
+    panel.reference.querySelectorAll("img[data-cdc-diagram]").forEach(image => {
+      image.addEventListener("load", fitContent, { once: true });
+    });
     panel.content.scrollTop = 0;
     panel.content.scrollLeft = 0;
     panel.manualSize = false;
