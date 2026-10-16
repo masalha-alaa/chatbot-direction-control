@@ -241,7 +241,7 @@
       source = mathRoot(elementOf(range.commonAncestorContainer)) || elementOf(range.commonAncestorContainer);
     }
     if (!source) return target.closest("img, picture") ? null :
-      { error: "Select text, or right-click an equation to pin it." };
+      { error: "Select text or an image, then right-click to pin it." };
     try {
       const copy = snapshotNode(source, range, { count: 0 });
       if (!copy || !(copy.textContent.trim() || copy.querySelector?.("svg"))) return null;
