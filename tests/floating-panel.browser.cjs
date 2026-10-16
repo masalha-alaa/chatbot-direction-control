@@ -202,6 +202,13 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   assert.equal(await page.evaluate(()=>panelRoot().querySelector('[data-cdc-diagram]').src),diagramUrl);
   assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference table,.reference svg,.reference [onclick],.reference [id]').length),0);
   assert.equal(await page.evaluate(()=>panelText()),'');
+  // The other menu item must use the selection captured by that same right-click,
+  // even if opening the browser menu has since cleared the live selection.
+  await page.evaluate(()=>{getSelection().removeAllRanges();pin();});
+  assert.equal(await page.evaluate(()=>panelText()),'NodeDistance');
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference img,.reference svg').length),0);
+  await page.evaluate(()=>{let result;onPin({type:'cdc:pin-floating-panel',diagram:true},{id:'test-extension'},value=>result=value);if(!result.ok)throw Error('Diagram snapshot was lost');});
+  await page.waitForFunction(()=>panelRoot().querySelector('[data-cdc-diagram]')?.naturalWidth>0);
   const diagramMetrics=()=>page.evaluate(()=>{
     const c=panelRoot().querySelector('.content'),i=c.querySelector('img').getBoundingClientRect();
     return {ratio:i.width/i.height,width:i.width,fits:c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1};
@@ -220,6 +227,22 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   await page.screenshot({path:path.join(require('node:os').tmpdir(),'cdc-svg-diagram-panel.png')});
   await page.evaluate(()=>{getSelection().removeAllRanges();context('#integral');pin();});
   assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('img').length),0,'Pinning an equation replaces the diagram');
+  // Mixed prose + math + diagram exercises the complete regular snapshot path.
+  await page.evaluate(src=>{
+    const box=document.querySelector('#diagram-box');
+    const image=document.createElement('img');image.id='diagram';image.src=src;image.setAttribute('data-d-component','svg');
+    box.prepend(image);
+    const caption=document.createElement('p');caption.textContent='Selected caption: ';
+    caption.appendChild(document.querySelector('#integral').cloneNode(true));box.appendChild(caption);
+    select('#diagram-box');context('#diagram');
+    getSelection().removeAllRanges();pin();
+  },diagramUrl);
+  assert.match(await page.evaluate(()=>panelText()),/Selected caption:/);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference [data-cdc-equation]').length),1);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference img').length),0);
+  await page.evaluate(()=>{context('#diagram');});
+  assert.equal(await page.evaluate(()=>pin().ok),false,'A diagram-only click must not reuse a stale text selection');
+  assert.equal(await page.evaluate(()=>{let result;onPin({type:'cdc:pin-floating-panel',diagram:true},{id:'test-extension'},value=>result=value);return result.ok;}),true);
   await page.evaluate(()=>{featureEnabled=false;subscribers.forEach(fn=>fn());});
   assert.equal(await page.locator('#cdc-floating-panel').count(),0);
   assert.deepEqual(errors,[]);

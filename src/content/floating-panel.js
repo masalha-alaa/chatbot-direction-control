@@ -196,10 +196,6 @@
 
   function capture(target) {
     if (editable(target)) return null;
-    // A direct diagram click always captures just that image, even when a
-    // previous text selection spans the surrounding box and its table.
-    if (diagramImage(target)) return captureDiagram(target);
-    if (target.closest("img, picture")) return null;
     const fragment = document.createDocumentFragment();
     const selection = window.getSelection();
     let source = mathRoot(target);
@@ -212,7 +208,8 @@
       if (editable(elementOf(range.startContainer)) || editable(elementOf(range.endContainer))) return null;
       source = mathRoot(elementOf(range.commonAncestorContainer)) || elementOf(range.commonAncestorContainer);
     }
-    if (!source) return { error: "Select text, or right-click an equation to pin it." };
+    if (!source) return target.closest("img, picture") ? null :
+      { error: "Select text, or right-click an equation to pin it." };
     try {
       const copy = snapshotNode(source, range, { count: 0 });
       if (!copy || !(copy.textContent.trim() || copy.querySelector?.("svg"))) return null;
@@ -411,26 +408,31 @@
 
   document.addEventListener("contextmenu", event => {
     pending = null;
-    if (!enabled() || !(event.target instanceof Element) || event.composedPath().some(node => node?.id === HOST_ID)) return;
-    const captured = capture(event.target);
-    if (captured) pending = { ...captured, url: location.href };
+    if (!enabled() || !(event.target instanceof Element) || editable(event.target) ||
+        event.composedPath().some(node => node?.id === HOST_ID)) return;
+    // Both menu actions may appear for a selection containing a diagram.
+    // Save independent snapshots before Chrome's menu can clear the selection.
+    const content = capture(event.target);
+    const diagram = diagramImage(event.target) ? captureDiagram(event.target) : null;
+    if (content || diagram) pending = { content, diagram, url: location.href };
     // Let Chrome open its native menu instead of ChatGPT's custom image menu.
-    if (captured?.diagram) event.stopImmediatePropagation();
+    if (diagram) event.stopImmediatePropagation();
   }, true);
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message?.type !== "cdc:pin-floating-panel" || sender.id !== chrome.runtime.id) return;
     if (!enabled() || !pending || pending.url !== location.href) { respond({ ok: false }); return; }
-    if (message.diagram && !pending.diagram) { respond({ ok: false }); return; }
-    if (pending.error) { notify(pending.error); respond({ ok: false }); return; }
+    const captured = message.diagram ? pending.diagram : pending.content;
+    if (!captured) { respond({ ok: false }); return; }
+    if (captured.error) { notify(captured.error); respond({ ok: false }); return; }
     if (!panel) createPanel();
     const collapse = panel.shell.querySelector(".collapse");
     panel.collapsed = false;
     panel.shell.classList.remove("collapsed");
     collapse.textContent = "▾"; collapse.title = "Collapse";
     collapse.setAttribute("aria-label", "Collapse panel"); collapse.setAttribute("aria-expanded", "true");
-    panel.content.style.background = pending.background;
-    panel.content.style.color = pending.color;
-    panel.reference.replaceChildren(pending.fragment.cloneNode(true));
+    panel.content.style.background = captured.background;
+    panel.content.style.color = captured.color;
+    panel.reference.replaceChildren(captured.fragment.cloneNode(true));
     // Loading the cloned data URL is asynchronous, even for a cached image.
     // Refit after decode, while respecting a user's subsequent manual resize.
     panel.reference.querySelectorAll("img[data-cdc-diagram]").forEach(image => {

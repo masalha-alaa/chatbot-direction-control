@@ -51,7 +51,8 @@
   chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const diagram = info.menuItemId === DIAGRAM_MENU_ID;
     if ((!diagram && info.menuItemId !== MENU_ID) || !Number.isInteger(tab?.id) || info.editable ||
-        (diagram ? info.mediaType !== "image" || !/^data:image\/svg\+xml[;,]/i.test(info.srcUrl || "") : info.mediaType) ||
+        (diagram ? info.mediaType !== "image" || !/^data:image\/svg\+xml[;,]/i.test(info.srcUrl || "") :
+          info.mediaType && (info.mediaType !== "image" || !info.selectionText?.trim())) ||
         (info.frameId != null && info.frameId !== 0)) return;
     try {
       const source = new URL(info.pageUrl);

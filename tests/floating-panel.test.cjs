@@ -88,6 +88,23 @@ test("diagram menu follows ChatGPT preferences and routes only embedded SVG imag
   assert.equal(h.routed.length, 1);
 });
 
+test("text pin action routes a selected-text click on an image independently of diagram pinning", async () => {
+  const h = workerHarness();
+  await h.settings.set("chatgpt.floatingPanel", true); await flush();
+  const info = { menuItemId: "cdc:pin-floating-panel", pageUrl: "https://chatgpt.com/c/test",
+    frameId: 0, mediaType: "image", selectionText: "Selected caption", srcUrl: "data:image/svg+xml,%3Csvg/%3E" };
+  await h.click(info, { id: 7 });
+  assert.equal(h.routed.length, 1);
+  assert.equal(h.routed[0][1].type, "cdc:pin-floating-panel");
+  assert.equal(h.routed[0][1].diagram, undefined);
+  for (const overrides of [{ selectionText: "" }, { selectionText: "  " },
+    { selectionText: undefined }, { mediaType: "video" }, { mediaType: "audio" },
+    { frameId: 1 }, { editable: true }]) {
+    await h.click({ ...info, ...overrides }, { id: 7 });
+  }
+  assert.equal(h.routed.length, 1);
+});
+
 function pageHarness(siteId = "chatgpt") {
   const { document, Element, HTMLElement, Node, Event } = parseHTML(`<html><body><article>
     <p id="text">A quiet river.</p>
@@ -125,6 +142,7 @@ function pageHarness(siteId = "chatgpt") {
       };
       selection={rangeCount:1,isCollapsed:false,containsNode:()=>true,getRangeAt:()=>({cloneRange:()=>range})};
     },
+    clearSelection() { selection=null; },
     context(id) { el(id).dispatchEvent(new Event("contextmenu",{bubbles:true})); },
     pin(sender="extension", diagram=false) { let response;receiver({type:"cdc:pin-floating-panel",diagram},{id:sender},value=>response=value);return response; },
     disable() {enabled=false; subscriptions.forEach(fn=>fn());},
@@ -195,7 +213,8 @@ test("direct diagram capture excludes surrounding table, stale selection and act
   h.el("diagram").setAttribute("src", src);
   h.select({ commonAncestorContainer: box, intersectsNode: () => true });
   h.context("diagram"); h.el("diagram").remove();
-  assert.equal(h.pin().ok, true);
+  h.clearSelection();
+  assert.equal(h.pin("extension", true).ok, true);
   const content = h.shadow().querySelector(".content");
   const image = content.querySelector("img");
   assert.equal(image.getAttribute("src"), src);
@@ -204,8 +223,22 @@ test("direct diagram capture excludes surrounding table, stale selection and act
   assert.equal(image.style.height, "auto");
   assert.equal(content.querySelectorAll("table, svg, [onclick], [id]").length, 0);
   assert.equal(content.textContent, "");
+  assert.equal(h.pin().ok, true);
+  assert.equal(h.shadow().querySelector(".content").textContent, "Distance");
+  assert.equal(h.shadow().querySelector(".content img"), null);
   h.disable();
   assert.equal(h.el("cdc-floating-panel"), null);
+});
+
+test("a diagram-only click cannot reuse a prior text selection snapshot", () => {
+  const h = pageHarness(), image=h.document.createElement("img");
+  image.id="diagram"; image.setAttribute("data-d-component", "svg");
+  image.setAttribute("src", "data:image/svg+xml,%3Csvg/%3E");
+  h.document.body.appendChild(image);
+  h.context("part"); assert.equal(h.pin().ok, true);
+  h.context("diagram"); assert.equal(h.pin().ok, false);
+  assert.equal(h.pin("extension", true).ok, true);
+  assert.equal(h.shadow().querySelectorAll(".content img").length, 1);
 });
 
 test("image pinning rejects ordinary, external and unmarked SVG images", () => {
@@ -234,4 +267,9 @@ test("diagram actions reject a pending equation and other chatbot adapters", () 
     assert.equal(other.pin("extension", true).ok, false);
     assert.equal(other.el("cdc-floating-panel"), null);
   }
+  const draft = h.document.createElement("div"); draft.setAttribute("contenteditable", "true");
+  draft.innerHTML = '<img id="draft-diagram" data-d-component="svg" src="data:image/svg+xml,%3Csvg/%3E">';
+  h.document.body.appendChild(draft); h.context("draft-diagram");
+  assert.equal(h.pin("extension", true).ok, false);
+  assert.equal(h.pin().ok, false);
 });
