@@ -203,6 +203,29 @@
     visit(root);
   }
 
+  // Triple-click can select the paragraph break and therefore use an outer
+  // container as the range's common ancestor. Strip margins only at the
+  // selection's outer edges, regardless of how deeply the paragraph is nested.
+  // Interior paragraphs keep their natural spacing.
+  function trimParagraphEdgeMargins(root) {
+    function edgeParagraph(node, leading) {
+      while (node?.nodeType === Node.ELEMENT_NODE) {
+        if (node.localName === "p") return node;
+        if (node.hasAttribute("data-cdc-equation")) return null;
+        const children = [...node.childNodes].filter(child =>
+          child.nodeType === Node.ELEMENT_NODE ||
+          (child.nodeType === Node.TEXT_NODE && child.textContent.trim()));
+        if (!children.length) return null;
+        node = children[leading ? 0 : children.length - 1];
+      }
+      return null;
+    }
+    const first = edgeParagraph(root, true);
+    if (first) first.style.setProperty("margin-block-start", "0");
+    const last = edgeParagraph(root, false);
+    if (last) last.style.setProperty("margin-block-end", "0");
+  }
+
   function capture(target) {
     if (editable(target)) return null;
     const fragment = document.createDocumentFragment();
@@ -222,6 +245,7 @@
     try {
       const copy = snapshotNode(source, range, { count: 0 });
       if (!copy || !(copy.textContent.trim() || copy.querySelector?.("svg"))) return null;
+      if (range) trimParagraphEdgeMargins(copy);
       // Display equation wrappers should fit the panel; internal math widths
       // and positioning remain intact, and oversized formulas can scroll.
       if (mathRoot(source)) {

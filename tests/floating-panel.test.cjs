@@ -191,6 +191,57 @@ test("pinning replaces one panel, expands a collapsed panel and disabling closes
   h.disable();assert.equal(h.el("cdc-floating-panel"),null);
 });
 
+test("paragraph edge margins match for direct and wrapped selections", () => {
+  const h = pageHarness();
+  const outer = h.document.createElement("div");
+  outer.id = "paragraph-container";
+  outer.innerHTML = '<div><p id="paragraph">A selected paragraph with <code>inline code</code>.</p></div>';
+  h.document.body.appendChild(outer);
+  const paragraph = h.el("paragraph");
+
+  // Dragging inside a paragraph: the paragraph itself is the copied root.
+  h.select({commonAncestorContainer: paragraph, intersectsNode: node =>
+    node === paragraph || paragraph.contains(node)});
+  h.context("paragraph");
+  assert.equal(h.pin().ok, true);
+  let root = h.shadow().querySelector(".reference").firstElementChild;
+  assert.equal(root.localName, "p");
+  assert.equal(root.style.getPropertyValue("margin-block-start"), "0");
+  assert.equal(root.style.getPropertyValue("margin-block-end"), "0");
+
+  // Triple-clicking can include the trailing paragraph boundary, causing
+  // the copied root to be an ancestor rather than the paragraph itself.
+  h.select({commonAncestorContainer: outer, intersectsNode: node =>
+    node === outer || outer.contains(node)});
+  h.context("paragraph");
+  assert.equal(h.pin().ok, true);
+  root = h.shadow().querySelector(".reference").firstElementChild;
+  assert.equal(root.localName, "div");
+  assert.equal(root.querySelector("p").style.getPropertyValue("margin-block-start"), "0");
+  assert.equal(root.querySelector("p").style.getPropertyValue("margin-block-end"), "0");
+  assert.equal(root.querySelector("code").textContent, "inline code");
+});
+
+test("only outer paragraph margins are trimmed in a multi-paragraph selection", () => {
+  const h = pageHarness();
+  const outer = h.document.createElement("div");
+  outer.id = "multi-paragraph";
+  outer.innerHTML = '<section><p>First paragraph.</p><p>Middle paragraph.</p><p>Last paragraph.</p></section>';
+  h.document.body.appendChild(outer);
+  h.select({commonAncestorContainer: outer, intersectsNode: node =>
+    node === outer || outer.contains(node)});
+  h.context("multi-paragraph");
+  assert.equal(h.pin().ok, true);
+  const paragraphs = [...h.shadow().querySelectorAll(".reference p")];
+  assert.equal(paragraphs.length, 3);
+  assert.equal(paragraphs[0].style.getPropertyValue("margin-block-start"), "0");
+  assert.equal(paragraphs[0].style.getPropertyValue("margin-block-end"), "");
+  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-start"), "");
+  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-end"), "");
+  assert.equal(paragraphs[2].style.getPropertyValue("margin-block-start"), "");
+  assert.equal(paragraphs[2].style.getPropertyValue("margin-block-end"), "0");
+});
+
 test("pinning multiple paragraphs restores prose flow without changing inline code or single-block layouts", () => {
   const h = pageHarness();
   for (const display of ["flex", "inline-flex", "grid", "inline-grid"]) {
