@@ -207,7 +207,7 @@ test("pinning multiple paragraphs restores prose flow without changing inline co
     assert.equal(copy.style.display, "block", `${display} must become a vertical prose container`);
     assert.equal(copy.querySelectorAll("p").length, 2);
     assert.equal(copy.querySelector("code").style.display, "inline");
-    assert.match(copy.textContent, /gcount\\(\\)/);
+    assert(copy.textContent.includes("gcount()"));
   }
   const single = h.document.createElement("div");
   single.id = "single-flex"; single.style.display = "flex";
