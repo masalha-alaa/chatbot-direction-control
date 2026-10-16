@@ -30,6 +30,30 @@
     return element?.closest("[data-math-source], [data-math-display]") ||
       element?.closest(".katex-display") || element?.closest(".katex, mjx-container, math");
   }
+  function diagramImage(element) {
+    // ChatGPT's self-contained diagrams are SVG images, not inline SVG markup.
+    // Keep them as images: SVG scripts and external resources stay inert.
+    return site.id === "chatgpt" && element?.matches('img[data-d-component="svg"]') &&
+      /^data:image\/svg\+xml[;,]/i.test(element.getAttribute("src") || "") &&
+      element.getAttribute("src").length <= 2_000_000;
+  }
+  function captureDiagram(source) {
+    const image = document.createElement("img");
+    image.src = source.getAttribute("src");
+    image.alt = source.getAttribute("alt") || "Pinned diagram";
+    image.draggable = false;
+    image.setAttribute("data-cdc-diagram", "");
+    Object.assign(image.style, { display: "block", width: "100%", maxWidth: "100%", height: "auto" });
+    // Reserve the source aspect ratio before the new image finishes decoding.
+    const ratio = getComputedStyle(source).aspectRatio;
+    if (ratio && ratio !== "auto") image.style.aspectRatio = ratio;
+    else if (source.naturalWidth && source.naturalHeight) {
+      image.style.aspectRatio = `${source.naturalWidth} / ${source.naturalHeight}`;
+    }
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(image);
+    return { fragment, diagram: true, background: backdrop(source), color: getComputedStyle(source).color };
+  }
   // A range ending at the start of an equation can intersect its outer span
   // without selecting any equation content. Do not expand that empty boundary.
   function selectedMathContent(source, range) {
@@ -172,6 +196,10 @@
 
   function capture(target) {
     if (editable(target)) return null;
+    // A direct diagram click always captures just that image, even when a
+    // previous text selection spans the surrounding box and its table.
+    if (diagramImage(target)) return captureDiagram(target);
+    if (target.closest("img, picture")) return null;
     const fragment = document.createDocumentFragment();
     const selection = window.getSelection();
     let source = mathRoot(target);
@@ -386,10 +414,13 @@
     if (!enabled() || !(event.target instanceof Element) || event.composedPath().some(node => node?.id === HOST_ID)) return;
     const captured = capture(event.target);
     if (captured) pending = { ...captured, url: location.href };
+    // Let Chrome open its native menu instead of ChatGPT's custom image menu.
+    if (captured?.diagram) event.stopImmediatePropagation();
   }, true);
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message?.type !== "cdc:pin-floating-panel" || sender.id !== chrome.runtime.id) return;
     if (!enabled() || !pending || pending.url !== location.href) { respond({ ok: false }); return; }
+    if (message.diagram && !pending.diagram) { respond({ ok: false }); return; }
     if (pending.error) { notify(pending.error); respond({ ok: false }); return; }
     if (!panel) createPanel();
     const collapse = panel.shell.querySelector(".collapse");
@@ -400,6 +431,11 @@
     panel.content.style.background = pending.background;
     panel.content.style.color = pending.color;
     panel.reference.replaceChildren(pending.fragment.cloneNode(true));
+    // Loading the cloned data URL is asynchronous, even for a cached image.
+    // Refit after decode, while respecting a user's subsequent manual resize.
+    panel.reference.querySelectorAll("img[data-cdc-diagram]").forEach(image => {
+      image.addEventListener("load", fitContent, { once: true });
+    });
     panel.content.scrollTop = 0;
     panel.content.scrollLeft = 0;
     panel.manualSize = false;

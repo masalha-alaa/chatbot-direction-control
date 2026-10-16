@@ -13,7 +13,7 @@ Features:
 - Change individual chatbot messages between LTR and RTL using the alignment icons below each message.
 - Each message's direction setting is saved locally and restored when revisiting the conversation.
 - Supports ChatGPT, Gemini, Claude, and Grok.
-- Pin selected text or whole equations in one draggable, resizable floating reference panel per tab.
+- Pin selected text, whole equations, or ChatGPT embedded SVG diagrams in one draggable, resizable floating reference panel per tab.
 - Middle-click supported ChatGPT sidebar items to open them in a background tab:
   New chat, Scheduled, Library, Plugins, recent conversations, and project folders.
   Project folders open their project page; conversations inside projects are not
@@ -66,7 +66,11 @@ Floating reference panel
 ------------------------
 
 Select text and right-click **Pin to floating panel**, or right-click an equation
-directly. New panels start at the top left, below the page header and
+directly. On ChatGPT, right-click an embedded SVG diagram and choose **Pin diagram
+to floating panel** to pin the diagram alone, excluding surrounding text and tables.
+The diagram scales to the panel width while preserving its proportions, including
+after resizing. This requires the per-site floating panel setting to be enabled.
+New panels start at the top left, below the page header and
 beside the narrow navigation rail. The reference stays at the same screen position as you scroll.
 Drag its header to move it, drag the bottom-right corner to resize it, and use the
 header − / + buttons to adjust reference text and equation sizes (70–200%, in 10% steps).
@@ -96,8 +100,11 @@ the tab or goes into extension storage.
 Snapshots preserve computed typography and rendered KaTeX math in an isolated shadow
 tree. Only inert presentation markup is copied; scripts, handlers, embedded frames,
 custom elements, and external SVG references are excluded. Oversized selections are
-rejected with a hint. Only text and rendered equations are supported; embedded
-images and standalone graphics are excluded from selections.
+rejected with a hint. Text selections support text and rendered equations; images
+and standalone graphics are excluded from selections. Direct diagram pinning is
+limited to ChatGPT's `img[data-d-component="svg"]` images with embedded
+`data:image/svg+xml` sources. These remain inert image elements; their SVG is never
+inserted as inline markup. Ordinary images and external image URLs are unsupported.
 
 Reload the unpacked extension and refresh chatbot tabs to try the new menu.
 

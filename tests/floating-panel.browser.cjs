@@ -176,9 +176,53 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   assert.equal(await page.evaluate(()=>window.failed),undefined);
   await page.evaluate(()=>{select('#text');context('#text');document.querySelector('#text').remove();pin();});
   assert.match(await page.evaluate(()=>panelText()),/silver fox/);
+  // ChatGPT's diagram + distance table: a direct image click must never clone
+  // the table, even when the old selection covers the complete outer box.
+  await page.setViewportSize({width:1100,height:800});
+  const diagramUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    fs.readFileSync(path.join(root,'tests/fixtures/pin-svg-diagram.svg'),'utf8'));
+  await page.evaluate(src => {
+    const box=document.createElement('div'); box.id='diagram-box';
+    box.innerHTML='<img id="diagram" data-d-component="svg" alt="Four-node graph" style="aspect-ratio:auto 320 / 145;width:100%" onclick="window.failed=1"><table><tr><td>Node</td><td>Distance</td></tr></table>';
+    document.body.prepend(box);box.querySelector('img').src=src;
+    window.customImageMenus=0;
+    box.addEventListener('contextmenu',event=>{window.customImageMenus++;event.preventDefault();});
+  },diagramUrl);
+  await page.waitForFunction(()=>document.querySelector('#diagram').naturalWidth>0);
+  const diagramPin=await page.evaluate(()=>{
+    select('#diagram-box');
+    const nativeAllowed=context('#diagram');
+    let result;onPin({type:'cdc:pin-floating-panel',diagram:true},{id:'test-extension'},value=>result=value);
+    return {nativeAllowed,result};
+  });
+  assert.equal(diagramPin.nativeAllowed,true,'The browser native image menu must remain available');
+  assert.equal(diagramPin.result.ok,true);
+  assert.equal(await page.evaluate(()=>customImageMenus),0,'The site image menu must not intercept supported diagrams');
+  await page.waitForFunction(()=>panelRoot().querySelector('[data-cdc-diagram]')?.naturalWidth>0);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelector('[data-cdc-diagram]').src),diagramUrl);
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('.reference table,.reference svg,.reference [onclick],.reference [id]').length),0);
+  assert.equal(await page.evaluate(()=>panelText()),'');
+  const diagramMetrics=()=>page.evaluate(()=>{
+    const c=panelRoot().querySelector('.content'),i=c.querySelector('img').getBoundingClientRect();
+    return {ratio:i.width/i.height,width:i.width,fits:c.scrollWidth<=c.clientWidth+1&&c.scrollHeight<=c.clientHeight+1};
+  });
+  let dm=await diagramMetrics();
+  assert(Math.abs(dm.ratio-320/145)<.01,'The diagram must preserve its aspect ratio');
+  assert(dm.fits,'The decoded diagram must fit the compact panel without scrollbars');
+  await page.evaluate(()=>{scrollTo(0,0);document.querySelector('#diagram').remove();});
+  assert(await page.evaluate(()=>panelRoot().querySelector('img').complete),'The pin must survive removal of its source');
+  const diagramBox=await page.locator('#cdc-floating-panel').boundingBox();
+  await page.mouse.move(diagramBox.x+diagramBox.width-8,diagramBox.y+diagramBox.height-8);
+  await page.mouse.down();await page.mouse.move(diagramBox.x+diagramBox.width+100,diagramBox.y+diagramBox.height+100);await page.mouse.up();
+  const enlargedDiagram=await diagramMetrics();
+  assert(enlargedDiagram.width>dm.width,'Resizing the panel must resize the diagram');
+  assert(Math.abs(enlargedDiagram.ratio-320/145)<.01);
+  await page.screenshot({path:path.join(require('node:os').tmpdir(),'cdc-svg-diagram-panel.png')});
+  await page.evaluate(()=>{getSelection().removeAllRanges();context('#integral');pin();});
+  assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('img').length),0,'Pinning an equation replaces the diagram');
   await page.evaluate(()=>{featureEnabled=false;subscribers.forEach(fn=>fn());});
   assert.equal(await page.locator('#cdc-floating-panel').count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS: minimum width/wrapped height, native triple-click boundaries, rendered KaTeX, equation spacing, font scaling/limits/keyboard controls, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
+  console.log('PASS: embedded SVG diagram-only capture, image loading/aspect ratio/resizing, native image menu isolation, minimum width/wrapped height, native triple-click boundaries, rendered KaTeX, equation spacing, font scaling/limits/keyboard controls, partial/mixed selection, text slicing, sanitization, fixed scrolling, drag, resize, collapse/replacement, small viewport, source rerender, disable cleanup');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1);});
