@@ -221,9 +221,9 @@
       return null;
     }
     const first = edgeParagraph(root, true);
-    if (first) first.style.marginBlockStart = "0";
+    if (first) first.style.setProperty("margin-block-start", "0");
     const last = edgeParagraph(root, false);
-    if (last) last.style.marginBlockEnd = "0";
+    if (last) last.style.setProperty("margin-block-end", "0");
   }
 
   function capture(target) {
