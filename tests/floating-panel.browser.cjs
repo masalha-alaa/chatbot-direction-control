@@ -37,6 +37,8 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
         <div style="display:inline-grid"><span data-math-display="true" data-math-source="I=1/3">${integral}</span></div>
       </div>
       <div id="inline-equation" style="display:inline-flex"><span>Before</span><span data-math-display="false">a+b</span><span>After</span></div>
+      <div id="edge-wrapper"><div><p id="edge-paragraph">You can pull the branch and retest both screenshots.</p></div></div>
+      <div id="edge-multiple"><section><p>First paragraph.</p><p>Second paragraph.</p><p>Third paragraph.</p></section></div>
       <div id="flex-prose" style="display:flex"><p>Consequently, the callback could return <code>true</code> early.</p><p>A more robust implementation should verify <code>gcount()</code>.</p></div>
       <div id="grid-prose" style="display:grid;grid-template-columns:1fr 1fr"><p>Consequently, the callback could return <code>true</code> early.</p><p>A more robust implementation should verify <code>gcount()</code>.</p></div>
       <section id="boundary-user"><article><p id="last-user">The final response line ends here.</p></article><h2 class="sr-only">You said:</h2><article><p>Next user message.</p></article></section>
@@ -109,6 +111,49 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   assert.equal(await page.evaluate(()=>getComputedStyle(panelRoot().querySelector('.reference').firstElementChild).display),'inline-flex',
     'Inline math must retain its surrounding inline flex layout');
   assert.equal(await page.evaluate(()=>panelRoot().querySelectorAll('[data-cdc-equation="display"]').length),0);
+  // A drag selection starts within the paragraph. A paragraph-break
+  // selection (as produced by triple-click) can instead start inside the
+  // paragraph and end at the outer wrapper.
+  const paragraphMetrics=async()=>page.evaluate(()=>{
+    const reference=panelRoot().querySelector('.reference');
+    const paragraph=reference.querySelector('p');
+    const container=reference.getBoundingClientRect(),box=paragraph.getBoundingClientRect();
+    const style=getComputedStyle(paragraph);
+    return {top:box.top-container.top,bottom:container.bottom-box.bottom,
+      marginStart:style.marginBlockStart,marginEnd:style.marginBlockEnd,
+      height:document.getElementById('cdc-floating-panel').getBoundingClientRect().height,
+      text:paragraph.textContent};
+  });
+  await page.evaluate(()=>{select('#edge-paragraph');context('#edge-paragraph');pin();});
+  const draggedMargins=await paragraphMetrics();
+  await page.evaluate(()=>{
+    const p=document.querySelector('#edge-paragraph');
+    const container=document.querySelector('#edge-wrapper');
+    const range=document.createRange();
+    range.setStart(p.firstChild,0);
+    range.setEnd(container,1);
+    const selection=getSelection();selection.removeAllRanges();selection.addRange(range);
+    context('#edge-paragraph');pin();
+  });
+  const tripleClickMargins=await paragraphMetrics();
+  assert.equal(tripleClickMargins.text,draggedMargins.text,'Both selection styles pin the same paragraph');
+  assert.equal(tripleClickMargins.marginStart,'0px');
+  assert.equal(tripleClickMargins.marginEnd,'0px');
+  assert(Math.abs(tripleClickMargins.top-draggedMargins.top)<1,'Both selections have identical top spacing');
+  assert(Math.abs(tripleClickMargins.bottom-draggedMargins.bottom)<1,'Both selections have identical bottom spacing');
+  assert(Math.abs(tripleClickMargins.height-draggedMargins.height)<1,'Both selection styles fit to the same panel height');
+  await page.evaluate(()=>{select('#edge-multiple');context('#edge-multiple');pin();});
+  const multiMargins=await page.evaluate(()=>{
+    const paragraphs=[...panelRoot().querySelectorAll('.reference p')];
+    const rects=paragraphs.map(p=>p.getBoundingClientRect());
+    return {first:getComputedStyle(paragraphs[0]).marginBlockStart,
+      middle:getComputedStyle(paragraphs[1]).marginBlockStart,
+      last:getComputedStyle(paragraphs[2]).marginBlockEnd,
+      gaps:[rects[1].top-rects[0].bottom,rects[2].top-rects[1].bottom]};
+  });
+  assert.equal(multiMargins.first,'0px');
+  assert.equal(multiMargins.last,'0px');
+  assert(multiMargins.gaps.every(gap=>gap>0),'Interior paragraph spacing must be preserved');
   for (const selector of ['#flex-prose','#grid-prose']) {
     await page.evaluate(selector=>{select(selector);context(selector);pin();},selector);
     const layout=await page.evaluate(()=>{
