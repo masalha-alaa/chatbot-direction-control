@@ -1,4 +1,4 @@
-Chatbot Direction Control — v1.1.3
+Chatbot Direction Control — v1.1.4
 
 Direction controls for ChatGPT, Gemini, Claude, and Grok.
 
