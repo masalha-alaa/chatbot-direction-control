@@ -163,11 +163,13 @@
     }
     // Do not retain empty layout wrappers at a range's trailing boundary.
     if (range && !copy.childNodes.length && !["br", "hr"].includes(tag)) return null;
-    // A selection spanning separate paragraphs can inherit a flex-row/grid
-    // response container. Restore prose flow without disturbing single blocks,
-    // inline formatting or KaTeX's internal flex/grid layout.
+    // Flex/grid direction and gaps are not captured, so source columns become
+    // rows in the panel. Restore document flow for block prose and display math,
+    // including intermediate wrappers around a single display equation.
+    // Leave inline equations and KaTeX's own layout untouched.
     if (!isMath && /^(inline-)?(flex|grid)$/.test(computed.display) &&
-        copy.querySelectorAll("p, blockquote, pre, h1, h2, h3, h4, h5, h6, ul, ol").length > 1) {
+        (copy.querySelectorAll("p, blockquote, pre, h1, h2, h3, h4, h5, h6, ul, ol").length > 1 ||
+         copy.querySelector('[data-cdc-equation="display"]'))) {
       copy.style.display = "block";
     }
     return copy;
