@@ -28,7 +28,7 @@
   text-align: left !important;
 }
 
-/* ChatGPT's auto-LTR BDI fragments can join surrounding Arabic into one RTL
+/* ChatGPT's auto-LTR BDI fragments can join surrounding RTL text into one RTL
  * run. Let those fragments participate in the forced-LTR paragraph instead. */
 [data-markdown-text-style="assistant-message"].cgpt-direction-target.cgpt-force-ltr
   bdi:is(:not([dir]), [dir="auto"]):dir(ltr):not(:is(pre, code, kbd, samp) *) {

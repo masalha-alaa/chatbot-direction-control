@@ -235,10 +235,10 @@ test("only outer paragraph margins are trimmed in a multi-paragraph selection", 
   const paragraphs = [...h.shadow().querySelectorAll(".reference p")];
   assert.equal(paragraphs.length, 3);
   assert.equal(paragraphs[0].style.getPropertyValue("margin-block-start"), "0");
-  assert.equal(paragraphs[0].style.getPropertyValue("margin-block-end"), "");
-  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-start"), "");
-  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-end"), "");
-  assert.equal(paragraphs[2].style.getPropertyValue("margin-block-start"), "");
+  assert.equal(paragraphs[0].style.getPropertyValue("margin-block-end") ?? "", "");
+  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-start") ?? "", "");
+  assert.equal(paragraphs[1].style.getPropertyValue("margin-block-end") ?? "", "");
+  assert.equal(paragraphs[2].style.getPropertyValue("margin-block-start") ?? "", "");
   assert.equal(paragraphs[2].style.getPropertyValue("margin-block-end"), "0");
 });
 
