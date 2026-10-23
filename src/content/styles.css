@@ -35,6 +35,12 @@
   unicode-bidi: normal !important;
 }
 
+/* Isolate mixed-direction bold text so following punctuation and words stay in
+ * their logical order in forced-LTR ChatGPT replies. */
+[data-markdown-text-style="assistant-message"].cgpt-direction-target.cgpt-force-ltr strong {
+  unicode-bidi: isolate;
+}
+
 /* Code should remain LTR even inside an RTL message. */
 .cgpt-direction-target :where(pre, pre *, code, kbd, samp) {
   direction: ltr !important;
