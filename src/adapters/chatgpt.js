@@ -40,7 +40,7 @@
     "/", ...Object.values(SIDEBAR_DESTINATION_PATHS)
   ]);
 
-  // Markup used by the optional RTL <bdi> trailing-punctuation correction.
+  // Markup used by the optional <bdi> trailing-punctuation correction.
   const BDI_PUNCTUATION_HELPER_ATTRIBUTE = "data-cdc-bidi-punct";
   const BDI_TRAILING_PUNCTUATION_RE = /[.!?؟…,:;،؛۔]+\s*$/u;
   const NON_PROSE_BDI_ANCESTOR_SELECTOR = "pre, code, kbd, samp";
@@ -116,10 +116,12 @@
     return lastTextNode;
   }
 
-  function restoreRtlBdiPunctuation(target) {
+  function restoreBdiPunctuation(target, mode = null) {
     target
       .querySelectorAll(`span[${BDI_PUNCTUATION_HELPER_ATTRIBUTE}]`)
       .forEach((helper) => {
+        // Keep an already-applied mode idempotent during mutation rescans.
+        if (helper.getAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE) === mode) return;
         const bdi = helper.previousSibling;
         if (!(bdi instanceof HTMLElement) || bdi.tagName !== "BDI") return;
 
@@ -131,10 +133,13 @@
       });
   }
 
-  function applyRtlBdiPunctuation(target) {
+  function applyBdiPunctuation(target, mode) {
     for (const bdi of target.querySelectorAll("bdi")) {
       if (!(bdi instanceof HTMLElement)) continue;
       if (bdi.closest(NON_PROSE_BDI_ANCESTOR_SELECTOR)) continue;
+      // LTR paragraphs need correction only for isolated RTL fragments.
+      // Preserve the existing RTL-mode behavior.
+      if (mode === "ltr" && getComputedStyle(bdi).direction !== "rtl") continue;
 
       const nextSibling = bdi.nextSibling;
       if (
@@ -157,7 +162,7 @@
       lastTextNode.data = lastTextNode.data.slice(0, -punctuation.length);
 
       const helper = document.createElement("span");
-      helper.setAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE, "");
+      helper.setAttribute(BDI_PUNCTUATION_HELPER_ATTRIBUTE, mode);
       helper.textContent = punctuation;
       bdi.after(helper);
     }
@@ -376,19 +381,21 @@
     /**
      * Optional correction for trailing punctuation isolated inside ChatGPT BDI.
      * The controller supplies the effective setting and role-approved mode.
-     * Disabling the setting or leaving RTL restores previously moved text.
+     * Resetting alignment or disabling the setting restores moved text.
+     * Switching modes restores the previous correction before applying the new one.
      * @param {{target: HTMLElement, mode: string|null,
      *   punctuationEnabled?: boolean}} options
      */
     onDirectionModeApplied({ target, mode, punctuationEnabled = false }) {
       if (!(target instanceof HTMLElement)) return;
 
-      if (!punctuationEnabled || mode !== "rtl") {
-        restoreRtlBdiPunctuation(target);
+      if (!punctuationEnabled || (mode !== "rtl" && mode !== "ltr")) {
+        restoreBdiPunctuation(target);
         return;
       }
 
-      applyRtlBdiPunctuation(target);
+      restoreBdiPunctuation(target, mode);
+      applyBdiPunctuation(target, mode);
     }
   });
 })();

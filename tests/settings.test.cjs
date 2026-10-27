@@ -214,3 +214,53 @@ test("actual ChatGPT punctuation hook respects a saved opt-out and restores text
   await h.settings.set("chatgpt.user", false);
   assert.equal(target.querySelector("bdi").textContent, "abc!");
 });
+
+test("ChatGPT LTR punctuation respects settings, mode switches and rescans", async () => {
+  const h = pageContext("chatgpt", storageHarness({ "cdc:settings:chatgpt.rtlPunctuation": false }));
+  let adapter;
+  h.context.ChatDirectionControl = { dom: {}, registerAdapter: value => { adapter = value; } };
+  // LinkeDOM does not resolve bidi direction; Chromium covers native auto direction.
+  h.context.getComputedStyle = element => ({ direction: element.getAttribute("dir") || "rtl" });
+  run(h.context, "src/adapters/chatgpt.js");
+  h.context.ChatDirectionControl = { getCurrentSiteAdapter: () => h.site };
+  h.site.onDirectionModeApplied = adapter.onDirectionModeApplied;
+  const target = h.document.querySelector("#a .text");
+  target.innerHTML = '<p>from <bdi>خلف العاشر.</bdi></p><ul><li>and <bdi>طريق.</bdi></li></ul>' +
+    '<p>different <bdi>طرق. </bdi><a>citation</a></p><p>Hebrew <bdi>דרכים.</bdi></p>' +
+    '<p><bdi dir="ltr">English!</bdi><code><bdi>طرق.</bdi></code><bdi>. </bdi></p>';
+  const original = target.innerHTML;
+  const helpers = () => [...target.querySelectorAll("[data-cdc-bidi-punct]")];
+  const click = async mode => {
+    h.document.querySelector(`#a [data-mode="${mode}"]`).dispatchEvent(new h.Event("click"));
+    await flush();
+  };
+  run(h.context, "src/content/response-direction.js"); await flush();
+  await click("ltr");
+  assert.equal(target.innerHTML, original, "Saved punctuation opt-out applies in LTR");
+  await h.settings.set("chatgpt.rtlPunctuation", true);
+  assert.equal(helpers().length, 4);
+  assert.equal(helpers()[2].textContent, ". ", "Trailing whitespace stays with the punctuation");
+  assert.equal(target.querySelector('bdi[dir="ltr"]').textContent, "English!");
+  assert.equal(target.querySelector("code bdi").textContent, "طرق.");
+  const first = helpers()[0];
+  h.rescan(); await flush();
+  assert.equal(helpers()[0], first, "Rescans must not recreate punctuation helpers");
+  await click("rtl");
+  assert.equal(helpers().length, 5, "Existing RTL correction still includes English fragments");
+  await click("ltr");
+  assert.equal(helpers().length, 4);
+  assert.equal(target.querySelector('bdi[dir="ltr"]').textContent, "English!", "Mode switches restore ineligible corrections");
+  await h.settings.set("chatgpt.assistant", false);
+  assert.equal(target.innerHTML, original);
+  await h.settings.set("chatgpt.assistant", true);
+  assert.equal(helpers().length, 4);
+  await h.settings.set("enabled", false);
+  assert.equal(target.innerHTML, original);
+  await h.settings.set("enabled", true);
+  assert.equal(helpers().length, 4);
+  await click("ltr");
+  assert.equal(target.innerHTML, original, "Reset restores the exact original markup");
+  await click("ltr");
+  await h.settings.set("chatgpt.rtlPunctuation", false);
+  assert.equal(target.innerHTML, original);
+});
