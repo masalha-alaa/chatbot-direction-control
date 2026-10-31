@@ -332,8 +332,12 @@
       setMode(message, null);
     }
     messageKeys.set(message, key);
-    const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`);
+    const existingToolbar = actionBar.querySelector(`.${TOOLBAR_CLASS}`) ||
+      turn.querySelector?.(`.${TOOLBAR_CLASS}`);
     if (existingToolbar) {
+      // A host can change the native controls' container without navigation.
+      // Move the existing toolbar to preserve its buttons and click handlers.
+      if (existingToolbar.parentElement !== actionBar) actionBar.appendChild(existingToolbar);
       restoreMode(message, key);
       return;
     }
