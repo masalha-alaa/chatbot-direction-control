@@ -30,12 +30,13 @@ function turn(id, { reply = true, marked = true } = {}) {
 const flush = async () => { for (let i = 0; i < 16; i++) await Promise.resolve(); };
 function harness(html, store = storageHarness()) {
   const { document, HTMLElement, Element, Event } = parseHTML(`<html><body>${html}</body></html>`);
+  let onMutation, scheduledScan;
   const context = vm.createContext({
     document, HTMLElement, Element, console, URL,
     location: new URL("https://chatgpt.com/c/test"),
     chrome: { storage: store.storage },
-    MutationObserver: class { observe() {} },
-    setTimeout() {}, clearTimeout() {}
+    MutationObserver: class { constructor(callback) { onMutation = callback; } observe() {} },
+    setTimeout(callback) { scheduledScan = callback; return 1; }, clearTimeout() {}
   });
   const run = file => vm.runInContext(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), context, { filename: file });
   run("src/shared/site-adapter-registry.js");
@@ -44,6 +45,7 @@ function harness(html, store = storageHarness()) {
   const get = id => document.getElementById(id);
   return { document, site, get, store,
     async start() { run("src/shared/settings.js"); run("src/content/response-direction.js"); await flush(); },
+    async rescan() { onMutation(); scheduledScan(); await flush(); },
     async click(id, mode) { get(id).querySelector(`[data-mode="${mode}"]`).dispatchEvent(new Event("click")); await flush(); },
     get settings() { return context.ChatDirectionSettings; }
   };
@@ -67,6 +69,67 @@ test("missing assistant content cannot target the user or an adjacent turn", () 
   // another assistant's text when the current reply is temporarily unmounted.
   h.document.querySelectorAll("[data-turn-key]").forEach(node => node.removeAttribute("data-turn-key"));
   assert.equal(h.site.getDirectionTarget(h.get("missing-assistant"), "assistant"), null);
+});
+
+test("Codex controls share native visibility for older users, the latest user and assistants", async () => {
+  const h = harness(turn("older") + turn("latest"));
+  for (const id of ["older", "latest"]) {
+    const userBar = h.get(`${id}-user`);
+    const userVisibility = h.document.createElement("div");
+    userVisibility.className = "isolate flex items-center gap-2" + (id === "older"
+      ? " opacity-0 group-focus-within/user-message:opacity-100 group-hover/user-message:opacity-100 [@media(hover:none)]:opacity-100"
+      : "");
+    userBar.before(userVisibility);
+    userVisibility.appendChild(userBar);
+
+    const assistantBar = h.get(`${id}-assistant`);
+    const nativeGroup = assistantBar.firstElementChild;
+    nativeGroup.className = "flex opacity-0 group-focus-within:opacity-100 group-hover:opacity-100";
+    nativeGroup.insertAdjacentHTML("beforeend", '<button aria-label="Rate response"></button>');
+    assistantBar.insertAdjacentHTML("beforeend", '<span data-assistant-message-sent-time="true">Time</span>');
+  }
+  await h.start();
+  for (const id of ["older", "latest"]) {
+    for (const role of ["user", "assistant"]) {
+      const bar = h.get(`${id}-${role}`);
+      const copy = bar.querySelector(`button[aria-label="${role === "user" ? "Copy message" : "Copy"}"]`);
+      const toolbar = bar.querySelector(".cgpt-direction-toolbar");
+      assert.equal(toolbar.parentElement, copy.parentElement, "native visibility ancestors also contain our toolbar");
+      assert.equal(bar.querySelectorAll(".cgpt-direction-toolbar").length, 1);
+    }
+    assert.equal(h.get(`${id}-assistant`).lastElementChild.hasAttribute("data-assistant-message-sent-time"), true,
+      "toolbar stays before the timestamp inside the native group");
+  }
+});
+
+test("switching native controls between flat and nested layouts moves the same toolbar without navigation", async () => {
+  const h = harness(turn("one"));
+  const bar = h.get("one-assistant");
+  const copy = bar.querySelector('button[aria-label="Copy"]');
+  bar.appendChild(copy);
+  bar.firstElementChild.remove();
+  await h.start();
+  await h.click("one-assistant", "rtl");
+  const toolbar = bar.querySelector(".cgpt-direction-toolbar");
+  assert.equal(toolbar.parentElement, bar);
+  const group = h.document.createElement("div");
+  group.className = "flex opacity-0 group-focus-within:opacity-100 group-hover:opacity-100";
+  bar.prepend(group);
+  group.appendChild(copy);
+  await h.rescan();
+  assert.equal(toolbar.parentElement, group);
+  assert.equal(bar.querySelector(".cgpt-direction-toolbar"), toolbar, "existing buttons and handlers survive");
+  assert.equal(toolbar.querySelector('[data-mode="rtl"]').getAttribute("aria-pressed"), "true");
+  await h.click("one-assistant", "ltr");
+  assert(h.get("one-assistant-text").classList.contains("cgpt-force-ltr"));
+  bar.prepend(copy);
+  await h.rescan();
+  assert.equal(toolbar.parentElement, bar, "leaving the nested layout also relocates the toolbar");
+  group.remove();
+  await h.rescan();
+  assert.equal(toolbar.parentElement, bar);
+  assert.equal(bar.querySelectorAll(".cgpt-direction-toolbar").length, 1);
+  assert.equal(toolbar.querySelector('[data-mode="ltr"]').getAttribute("aria-pressed"), "true");
 });
 
 test("assistant and user clicks, resets, saved alignment and role settings stay independent", async () => {

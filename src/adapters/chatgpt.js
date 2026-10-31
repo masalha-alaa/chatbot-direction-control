@@ -61,6 +61,22 @@
     )];
   }
 
+  function getNativeActionContainer(bar) {
+    const copyButton = bar.querySelector(
+      `${USER_COPY_BUTTON_SELECTOR}, ${ASSISTANT_COPY_BUTTON_SELECTOR}`
+    );
+    if (!copyButton) return bar;
+
+    // Codex keeps its hover-controlled buttons in a child of the action row,
+    // beside the timestamp. Share that container so native visibility applies
+    // to our controls too, including focus and always-visible host variants.
+    let container = copyButton;
+    while (container.parentElement && container.parentElement !== bar) {
+      container = container.parentElement;
+    }
+    return container === copyButton ? bar : container;
+  }
+
   function findClosestAncestorTarget(element, selectors, role) {
     // A current ChatGPT turn can contain BOTH roles. The assistant action bar
     // sits outside its text container, so an unfiltered query in the shared
@@ -318,10 +334,10 @@
     findActionBar(turn) {
       if (!turn) return null;
 
-      if (turn.matches?.(ACTION_BAR_SELECTOR)) return turn;
+      if (turn.matches?.(ACTION_BAR_SELECTOR)) return getNativeActionContainer(turn);
 
       const currentBar = turn.querySelector?.(ACTION_BAR_SELECTOR);
-      if (currentBar instanceof HTMLElement) return currentBar;
+      if (currentBar instanceof HTMLElement) return getNativeActionContainer(currentBar);
 
       const actionButton = firstElement(turn, [
         '[data-testid="copy-turn-action-button"]',
