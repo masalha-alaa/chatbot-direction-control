@@ -71,6 +71,8 @@ to floating panel** to pin the diagram alone, excluding surrounding text and tab
 When a selection includes text and a diagram, **Pin to floating panel** captures
 the selected text and equations, excluding the image; **Pin diagram to floating
 panel** captures only the right-clicked diagram.
+For inline ChatGPT diagrams such as Mermaid, right-click the diagram without
+selecting surrounding text and choose **Pin to floating panel**.
 The diagram scales to the panel width while preserving its proportions, including
 after resizing. This requires the per-site floating panel setting to be enabled.
 New panels start at the top left, below the page header and
