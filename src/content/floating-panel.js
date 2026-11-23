@@ -7,6 +7,7 @@
   const HOST_ID = "cdc-floating-panel";
   const MATH_SELECTOR = "[data-math-source], [data-math-display], .katex-display, .katex, mjx-container, math";
   const MATH_WRAPPER = "[data-math-source], [data-math-display], .katex-display, .katex, .katex-html, mjx-container";
+  const INLINE_DIAGRAM_SELECTOR = 'svg[role="img"], [data-mermaid-render-status="ready"] > svg';
   const SKIP = new Set(["script", "style", "iframe", "object", "embed", "input", "textarea", "select", "button", "link", "meta", "audio", "video", "img", "picture", "canvas"]);
   const HTML_TAGS = new Set("a abbr b bdi bdo blockquote br code dd del div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i kbd li mark ol p pre s samp small span strong sub sup table tbody td th thead tr tfoot u ul wbr".split(" "));
   const VECTOR_TAGS = new Set("svg g path line rect circle ellipse polygon polyline text tspan".split(" "));
@@ -16,6 +17,7 @@
   const VECTOR_ATTRS = new Set("viewBox d x y x1 y1 x2 y2 cx cy r rx ry width height points transform fill stroke stroke-width preserveAspectRatio xmlns".split(" "));
   const MATH_ATTRS = new Set("display encoding mathvariant stretchy fence separator lspace rspace accent accentunder columnalign rowalign columnspacing rowspacing colspan rowspan".split(" "));
   const MAX_NODES = 6000;
+  const MAX_DIAGRAM_SRC_LENGTH = 2_000_000;
   const GAP = 12;
   // Start below the page header and beside the narrow navigation rail.
   const INITIAL_POSITION = { x: 84, y: 56 };
@@ -31,28 +33,58 @@
       element?.closest(".katex-display") || element?.closest(".katex, mjx-container, math");
   }
   function diagramImage(element) {
-    // ChatGPT's self-contained diagrams are SVG images, not inline SVG markup.
-    // Keep them as images: SVG scripts and external resources stay inert.
     return site.id === "chatgpt" && element?.matches('img[data-d-component="svg"]') &&
       /^data:image\/svg\+xml[;,]/i.test(element.getAttribute("src") || "") &&
-      element.getAttribute("src").length <= 2_000_000;
+      element.getAttribute("src").length <= MAX_DIAGRAM_SRC_LENGTH;
   }
-  function captureDiagram(source) {
+  function captureDiagram(source, src = source.getAttribute("src"), aspectRatio) {
+    const computed = getComputedStyle(source);
     const image = document.createElement("img");
-    image.src = source.getAttribute("src");
-    image.alt = source.getAttribute("alt") || "Pinned diagram";
+    image.src = src;
+    image.alt = source.getAttribute("alt") || source.getAttribute("aria-label") ||
+      source.querySelector(":scope > title")?.textContent || "Pinned diagram";
     image.draggable = false;
     image.setAttribute("data-cdc-diagram", "");
     Object.assign(image.style, { display: "block", width: "100%", maxWidth: "100%", height: "auto" });
     // Reserve the source aspect ratio before the new image finishes decoding.
-    const ratio = getComputedStyle(source).aspectRatio;
+    const ratio = aspectRatio || computed.aspectRatio;
     if (ratio && ratio !== "auto") image.style.aspectRatio = ratio;
     else if (source.naturalWidth && source.naturalHeight) {
       image.style.aspectRatio = `${source.naturalWidth} / ${source.naturalHeight}`;
     }
     const fragment = document.createDocumentFragment();
     fragment.appendChild(image);
-    return { fragment, diagram: true, background: backdrop(source), color: getComputedStyle(source).color };
+    return { fragment, background: backdrop(source), color: computed.color };
+  }
+
+  function captureInlineDiagram(svg) {
+    const { width, height } = svg.getBoundingClientRect();
+    if (!width || !height) return null;
+    const markup = svg.outerHTML;
+    const tooLarge = { error: "This diagram is too large to pin." };
+    if (markup.length > MAX_DIAGRAM_SRC_LENGTH) return tooLarge;
+
+    const copy = svg.cloneNode(true);
+    const computed = getComputedStyle(svg);
+    // Preserve inherited theme values and the viewport used by the original SVG.
+    const themeProperties = new Set(["color", "color-scheme", "font-family", "font-size", "direction"]);
+    for (const [, property] of markup.matchAll(/var\(\s*(--[\w-]+)/g)) themeProperties.add(property);
+    for (const property of themeProperties) {
+      const value = computed.getPropertyValue(property);
+      if (value) copy.style.setProperty(property, value);
+    }
+    for (const property of ["width", "min-width", "max-width", "height", "min-height", "max-height"]) {
+      copy.style.removeProperty(property);
+    }
+    copy.setAttribute("width", width);
+    copy.setAttribute("height", height);
+    if (!copy.hasAttribute("viewBox")) copy.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    // Render the snapshot as an image so scripts and external resources stay inert.
+    const xml = new XMLSerializer().serializeToString(copy);
+    const src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml.toWellFormed());
+    if (src.length > MAX_DIAGRAM_SRC_LENGTH) return tooLarge;
+    return captureDiagram(svg, src, `${width} / ${height}`);
   }
   // A range ending at the start of an equation can intersect its outer span
   // without selecting any equation content. Do not expand that empty boundary.
@@ -98,8 +130,7 @@
     let copy;
     const svg = source.namespaceURI === "http://www.w3.org/2000/svg";
     const math = source.namespaceURI === "http://www.w3.org/1998/Math/MathML";
-    // SVG is retained only as part of a rendered equation (for roots, fences,
-    // and other math symbols). Standalone graphics are outside pinning support.
+    // Keep only equation SVGs in text selections. Diagrams are captured separately.
     if (svg && (!isMath || !VECTOR_TAGS.has(tag))) return null;
     if (math && !MATH_TAGS.has(tag)) return null;
     copy = document.createElementNS(svg || math ? source.namespaceURI : "http://www.w3.org/1999/xhtml",
@@ -240,6 +271,8 @@
       if (editable(elementOf(range.startContainer)) || editable(elementOf(range.endContainer))) return null;
       source = mathRoot(elementOf(range.commonAncestorContainer)) || elementOf(range.commonAncestorContainer);
     }
+    const diagram = site.id === "chatgpt" && target.closest(INLINE_DIAGRAM_SELECTOR);
+    if (diagram && (!source || diagram.contains(source))) return captureInlineDiagram(diagram);
     if (!source) return target.closest("img, picture") ? null :
       { error: "Select text or an image, then right-click to pin it." };
     try {

@@ -334,6 +334,42 @@ const wide = katex.renderToString(Array(40).fill('a').join('+'), {displayMode:tr
   await page.evaluate(()=>{context('#diagram');});
   assert.equal(await page.evaluate(()=>pin().ok),false,'A diagram-only click must not reuse a stale text selection');
   assert.equal(await page.evaluate(()=>{let result;onPin({type:'cdc:pin-floating-panel',diagram:true},{id:'test-extension'},value=>result=value);return result.ok;}),true);
+  const inlinePin = await page.evaluate(() => {
+    const box = document.createElement('div');
+    box.style.setProperty('--diagram-fill', '#4285f4');
+    box.style.color = '#fbbc04';
+    box.innerHTML = `<p>Surrounding text</p><div data-mermaid-render-status="ready"><svg
+      viewBox="0 0 200 100" style="width:200px;max-width:100%" aria-label="Flowchart">
+      <style>#inline-node { fill: var(--diagram-fill) }</style>
+      <defs><marker id="inline-arrow" markerWidth="10" markerHeight="10" refX="0" refY="5"
+        orient="auto"><path fill="currentColor" d="M0 0L10 5L0 10Z"/></marker></defs>
+      <rect id="inline-node" width="100" height="100"/>
+      <path d="M100 50H160" stroke="currentColor" marker-end="url(#inline-arrow)"/>
+    </svg></div>`;
+    document.body.appendChild(box);
+    getSelection().removeAllRanges();
+    context('#inline-node');
+    box.remove();
+    return pin();
+  });
+  assert.equal(inlinePin.ok, true, 'A right-click on a Mermaid child should capture the whole diagram');
+  const inlineSnapshot = await page.evaluate(async () => {
+    const image = panelRoot().querySelector('img[data-cdc-diagram]');
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 100;
+    const graphics = canvas.getContext('2d');
+    graphics.drawImage(image, 0, 0, 200, 100);
+    const pixel = (x, y) => [...graphics.getImageData(x, y, 1, 1).data];
+    return {
+      alt: image.alt, ratio: image.naturalWidth / image.naturalHeight,
+      text: panelText(), fill: pixel(50, 50), marker: pixel(163, 50)
+    };
+  });
+  assert.deepEqual(inlineSnapshot, {
+    alt: 'Flowchart', ratio: 2, text: '', fill: [66, 133, 244, 255], marker: [251, 188, 4, 255]
+  }, 'The image must retain the viewport, inherited colors and local marker');
   await page.evaluate(()=>{featureEnabled=false;subscribers.forEach(fn=>fn());});
   assert.equal(await page.locator('#cdc-floating-panel').count(),0);
   assert.deepEqual(errors,[]);
